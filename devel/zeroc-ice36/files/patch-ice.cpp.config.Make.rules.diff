@@ -1,0 +1,23 @@
+--- Ice-3.6.2.orig/cpp/config/Make.rules	2016-07-12 23:05:45.000000000 +0300
++++ Ice-3.6.2/cpp/config/Make.rules	2016-07-12 23:04:49.000000000 +0300
+@@ -216,7 +216,7 @@
+ 
+ ifneq ($(UNAME),MINGW)
+ ifneq ($(BZIP2_HOME),)
+-    BZIP2_FLAGS         = -I$(BZIP2_HOME)/include)
++    BZIP2_FLAGS         = -I$(BZIP2_HOME)/include
+ endif
+ ifeq ($(BZIP2_LIBS),)
+     BZIP2_LIBS          = $(if $(BZIP2_HOME),-L$(BZIP2_HOME)/$(libsubdir)) -lbz2
+@@ -229,9 +229,9 @@
+ endif
+ 
+ ifneq ($(DB_HOME),)
+-    DB_FLAGS            = -I$(DB_HOME)/include
++    DB_FLAGS            = -I$(DB_HOME)/include/db53
+     ifeq ($(DB_LIBS),)
+-        DB_LIBS        	= -L$(DB_HOME)/$(libsubdir) -ldb_cxx
++        DB_LIBS        	= -L$(DB_HOME)/$(libsubdir)/db53 -ldb_cxx
+     endif
+     DB_RPATH_LINK       = $(call rpathlink,$(DB_HOME)/$(libsubdir))
+ else
