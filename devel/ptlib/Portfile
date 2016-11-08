@@ -1,0 +1,23 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+# $Id$
+
+PortSystem          1.0
+
+name                ptlib
+version             2.12.8
+categories          devel
+platforms           darwin
+license             BSD
+maintainers         gkorovin
+description         ptlib
+long_description    Portable Tool Library
+
+#fetching fixed version
+master_sites		http://www.h323plus.org/source/download
+distfiles			${name}-${version}.tar.bz2
+
+#patching compilation ambiguity(ostream, PString)
+patchfiles			patch-svcproc.diff
+
+checksums           rmd160  0e8d34cc70989381cab1e5eefef797ac1a6132bd \
+	                sha256  dc14467ce8fc629d09aa1e373c2cc871002d08b3afa1a7586323b6806309a369
