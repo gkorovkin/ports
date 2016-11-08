@@ -1,0 +1,37 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+# $Id$
+
+PortSystem          1.0
+
+name                openh323
+distname			h323plus
+version             1.26.6
+categories          devel
+platforms           darwin
+license             BSD
+maintainers         gkorovin
+description         opeh323
+long_description    H323 Plus library
+
+#fetch from cvs
+fetch.type			cvs
+cvs.root			:pserver:anonymous@h323plus.cvs.sourceforge.net:/cvsroot/h323plus
+cvs.tag				v[join [split ${version} .] _]
+#cvs.module			h323plus
+
+patchfiles			patch-ptlib-pkgconfig.diff
+
+depends_lib			port:ptlib
+
+#pre-configure {
+#    autoconf -f -I ${prefix}/aclocal
+#    cd plugins && autoconf -f -I ${prefix}/aclocal
+#}
+use_autoconf		yes
+autoconf.args		-I ${prefix}/share/aclocal
+
+configure.args		--enable-plugins \
+    				--disable-h46018 \
+        			--disable-h46023 \
+        			--disable-h460p \
+        		    --disable-gnugk

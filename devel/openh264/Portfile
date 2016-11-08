@@ -18,11 +18,6 @@ git.url				https://github.com/cisco/openh264.git
 git.branch			v${version}
 use_configure		no
 
-checksums           rmd160  7bbfce4fecc2a8e1ca081169e70c1a298ab1b75a \
-	                sha256  2829fcb7393bac85925090b286b1f9c3cd3fbbf8e7f35796ef4131322509aa53
-
-#patchfiles          patch-Makefile.diff
-
 depends_lib         port:nasm
 
 # only one step

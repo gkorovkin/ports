@@ -8,7 +8,7 @@ version         3.6.2
 revision        1
 set branch      [join [lrange [split ${version} .] 0 1] .]
 categories      devel
-maintainers     blair
+maintainers     gkorovkin
 conflicts       zeroc-ice33 zeroc-ice34 zeroc-ice35
 license         GPL-2
 description     Fast, object-oriented RPC for C++, Java, Python, Ruby, PHP
@@ -41,8 +41,8 @@ distname        Ice-${version}
 checksums       sha1   7516941c2ac63d300dd1ee95813cf60e7316c3cb \
                 sha256 5e9305a5eb6081c8f128d63a5546158594e9f115174fc91208f645dbe2fc02fe
 
-patchfiles      patch-ice.cpp.config.Make.rules.diff 
-              
+patchfiles      patch-ice.cpp.config.Make.rules.diff
+
 patch.pre_args  -p1
 platforms       darwin
 
