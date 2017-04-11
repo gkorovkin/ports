@@ -1,0 +1,23 @@
+Author: Jose Carlos Garcia Sogo <jsogo@debian.org>
+Description: This patch removes the "samples/simple" subdir from the Makefile.in.
+Index: h323plus/Makefile.in
+===================================================================
+--- h323plus.orig/Makefile.in
++++ h323plus/Makefile.in
+@@ -54,7 +54,7 @@ include $(OPENH323DIR)/openh323u.mak
+ # export NOAUDIOCODECS=true
+ # export NOVIDEO=true
+ 
+-SUBDIRS := samples/simple
++SUBDIRS :=
+ 
+ ifneq (,$(wildcard dump323))
+ SUBDIRS += dump323
+@@ -99,6 +99,7 @@ docs:
+ install:
+ 	mkdir -p $(DESTDIR)$(LIBDIR)
+ 	rm -f $(DESTDIR)$(LIBDIR)/libh323_*_r.so*
++	$(INSTALL) -m 444 lib/libh323_s.a $(DESTDIR)$(LIBDIR)
+ 	$(INSTALL) -m 444 lib/$(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@ $(DESTDIR)$(LIBDIR)
+ 	(cd $(DESTDIR)$(LIBDIR) ; \
+ 		rm -f  $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@ ; \

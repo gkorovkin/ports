@@ -1,0 +1,58 @@
+--- h323plus-1.26.6.orig/src/h323caps.cxx
++++ h323plus-1.26.6/src/h323caps.cxx
+@@ -3684,7 +3684,7 @@ H323Capability * H323Capabilities::FindC
+   if (subTypePDU.GetTag() != 0) {
+     if (translationTable != NULL)
+       subTypeID = translationTable[subTypeID];
+-    return FindCapability(mainType, subTypeID);
++    return FindCapability(mainType, subTypeID, &subTypePDU);
+   }
+
+   PTRACE(4, "H323\tFindCapability: " << mainType << " nonStandard");
+@@ -3702,7 +3702,8 @@ H323Capability * H323Capabilities::FindC
+
+
+ H323Capability * H323Capabilities::FindCapability(H323Capability::MainTypes mainType,
+-                                                  unsigned subType) const
++                                                  unsigned subType,
++												  const PASN_Choice *sub_type_pdu) const
+ {
+   if (subType != UINT_MAX) {
+      PTRACE(4, "H323\tFindCapability: " << mainType << " subtype=" << subType);
+@@ -3712,8 +3713,22 @@ H323Capability * H323Capabilities::FindC
+     H323Capability & capability = table[i];
+     if (capability.GetMainType() == mainType &&
+                         (subType == UINT_MAX || capability.GetSubType() == subType)) {
+-      PTRACE(3, "H323\tFound capability: " << capability);
+-      return &capability;
++		//if subtype specified - make more accurate search
++		if (sub_type_pdu)
++		{
++			if (capability.IsMatch(*sub_type_pdu))
++			{
++				PTRACE(3, "H323\tFound accurate capability: " << capability);
++				return &capability;
++			}
++			else
++				continue;
++		}
++		else
++		{
++			PTRACE(3, "H323\tFound by subtype capability: " << capability);
++			return &capability;
++		}
+     }
+   }
+
+--- h323plus-1.26.6.orig/include/h323caps.h
++++ h323plus-1.26.6/include/h323caps.h
+@@ -2363,7 +2363,8 @@ class H323Capabilities : public PObject
+       */
+     H323Capability * FindCapability(
+       H323Capability::MainTypes mainType, ///< Main type to find
+-      unsigned subType = UINT_MAX         ///< Sub-type to find (UINT_MAX=ignore)
++      unsigned subType = UINT_MAX,         ///< Sub-type to find (UINT_MAX=ignore)
++	  const PASN_Choice * subTypePDU = NULL ///< More accurate match(mostly for h263)
+     ) const;
+
+     /**Build a H.245 PDU from the information in the capability set.

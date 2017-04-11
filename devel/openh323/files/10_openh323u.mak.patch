@@ -1,0 +1,24 @@
+Author: Jose Carlos Garcia Sogo <jsogo@debian.org>
+Description: No description.
+Index: h323plus/openh323u.mak.in
+===================================================================
+--- h323plus.orig/openh323u.mak.in
++++ h323plus/openh323u.mak.in
+@@ -148,8 +148,8 @@ ifneq ($(HAS_PTLIB_LIB_MAK),1)
+ CFLAGS += $(STDCCFLAGS)
+ endif # HAS_PTLIB_LIB_MAK
+ 
++ifndef RELATED_PKG_MAKEFILE
+ $(TARGET) :	$(OH323_LIBDIR)/$(OH323_FILE)
+-
+ ifndef LIBRARY_MAKEFILE
+ ifdef DEBUG
+ $(OH323_LIBDIR)/$(OH323_FILE):
+@@ -159,6 +159,7 @@ $(OH323_LIBDIR)/$(OH323_FILE):
+ 	$(MAKE) -C $(OH323_SRCDIR) opt
+ endif # DEBUG
+ endif # LIBRARY_MAKEFILE
++endif
+ 
+ # End of file
+ 

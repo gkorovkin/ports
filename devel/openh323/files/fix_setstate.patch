@@ -1,0 +1,50 @@
+Index: h323plus/include/mediafmt.h
+===================================================================
+--- h323plus.orig/include/mediafmt.h
++++ h323plus/include/mediafmt.h
+@@ -138,15 +138,6 @@ class OpalMediaOption : public PObject
+     H245GenericInfo m_H245Generic;
+ };
+ 
+-#if PTLIB_VER < 2110
+-#ifndef __USE_STL__
+-__inline istream & operator>>(istream & strm, bool& b)
+-{
+-   int i;strm >> i;b = i; return strm;
+-}
+-#endif
+-#endif
+-
+ template <typename T>
+ class OpalMediaOptionValue : public OpalMediaOption
+ {
+@@ -182,11 +173,7 @@ class OpalMediaOptionValue : public Opal
+       if (temp >= m_minimum && temp <= m_maximum)
+         m_value = temp;
+       else {
+-#if PTLIB_VER >= 2110 || defined(__USE_STL__)
+-	   strm.setstate(ios::badbit);
+-#else
+-	   strm.setf(ios::badbit , ios::badbit);
+-#endif
++        strm.setstate(ios::badbit);
+        }
+     }
+ 
+Index: h323plus/src/mediafmt.cxx
+===================================================================
+--- h323plus.orig/src/mediafmt.cxx
++++ h323plus/src/mediafmt.cxx
+@@ -377,11 +377,7 @@ void OpalMediaOptionEnum::ReadFrom(istre
+ 
+   m_value = m_enumerations.GetSize();
+ 
+-#if PTLIB_VER >= 2110 || defined(__USE_STL__)
+-   strm.setstate(ios::badbit);
+-#else
+-   strm.setf(ios::badbit , ios::badbit);
+-#endif
++  strm.setstate(ios::badbit);
+ }
+ 
+ 

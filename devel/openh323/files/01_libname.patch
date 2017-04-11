@@ -1,0 +1,15 @@
+Author: Kilian Krause <kilian@debian.org>
+Description: Fixes the libraries' file names
+Index: h323plus/openh323u.mak.in
+===================================================================
+--- h323plus.orig/openh323u.mak.in
++++ h323plus/openh323u.mak.in
+@@ -132,7 +132,7 @@ OH323_SUFFIX = $(OBJ_SUFFIX)
+ endif # OH323_SUFFIX
+ endif # HAS_PTLIB_LIB_MAK
+ 
+-OH323_BASE  = h323_$(PLATFORM_TYPE)_$(OH323_SUFFIX)$(LIB_TYPE)
++OH323_BASE  = h323$(LIB_TYPE)
+ OH323_FILE  = lib$(OH323_BASE).$(LIB_SUFFIX)
+ 
+ LDFLAGS	    += -L$(OH323_LIBDIR)

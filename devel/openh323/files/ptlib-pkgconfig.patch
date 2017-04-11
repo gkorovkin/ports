@@ -1,0 +1,40 @@
+Index: h323plus/configure.ac
+===================================================================
+--- h323plus.orig/configure.ac
++++ h323plus/configure.ac
+@@ -3,6 +3,8 @@ AC_INIT(include/h323.h)
+ AC_PROG_CXX
+ AC_HEADER_STDC
+ 
++m4_include([pkg.m4])
++
+ dnl this must be updated for every minor revision, and for
+ dnl builds when and as necessary
+ REQUIRED_PTLIB_MAJOR=2
+@@ -65,6 +67,13 @@ dnl ####################################
+ dnl look for ptlib, use a preference order of explicit PTLIBDIR, directory
+ dnl at same level, home directory, /usr/local or /usr, pkgconfig.
+ 
++PKG_PROG_PKG_CONFIG
++
++PKG_CHECK_EXISTS([ptlib], [
++  PTLIBPREFIX=`${PKG_CONFIG} --variable=prefix ptlib`
++  PTLIBDIR="${PTLIBPREFIX}/share/ptlib/"
++  HAS_PTLIB=1])
++
+ if test "${PTLIBDIR:-unset}" != "unset" ; then 	 
+   AC_CHECK_HEADER(${PTLIBDIR}/version.h, HAS_PTLIB=1) 	 
+ fi
+@@ -112,10 +121,10 @@ fi
+ AC_CHECK_FILE(${PTLIBDIR}/make/lib.mak, HAS_PTLIB_LIB_MAK=1)
+ 
+ if test "${HAS_PTLIB_LIB_MAK:-unset}" = "unset" ; then
+-  PKG_PROG_PKG_CONFIG
+   PKG_CHECK_MODULES([PTLIB], [ptlib], HAS_PTLIB=1)
+   if test ${HAS_PTLIB}x = 1x; then
+-    PTLIBDIR=`${PKG_CONFIG} --variable=prefix ptlib`
++    PTLIBPREFIX=`${PKG_CONFIG} --variable=prefix ptlib`
++    PTLIBDIR="${PTLIBPREFIX}/share/ptlib/"
+     PTVERSION=`${PKG_CONFIG} --modversion ptlib`
+     target_os=`${PKG_CONFIG} --variable=target_os ptlib`
+     target_cpu=`${PKG_CONFIG} --variable=target_cpu ptlib`
