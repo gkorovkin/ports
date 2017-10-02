@@ -13,11 +13,15 @@ description         ptlib
 long_description    Portable Tool Library
 
 #fetching fixed version
+#634deba0bc879e00006a7ae4f297f671534700c6
+
 master_sites		http://www.h323plus.org/source/download
 distfiles			${name}-${version}.tar.bz2
 
-#patching compilation ambiguity(ostream, PString)
+patch.pre_args      -p1
 patchfiles			patch-svcproc.diff
+
+configure.args      --disable-audio --disable-pluginmgr --disable-plugins --disable-video
 
 checksums           rmd160  0e8d34cc70989381cab1e5eefef797ac1a6132bd \
 	                sha256  dc14467ce8fc629d09aa1e373c2cc871002d08b3afa1a7586323b6806309a369
