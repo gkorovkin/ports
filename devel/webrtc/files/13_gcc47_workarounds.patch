@@ -1,0 +1,605 @@
+Index: webrtc/src/webrtc/common_audio/vad/include/vad.h
+===================================================================
+--- webrtc.orig/src/webrtc/common_audio/vad/include/vad.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/common_audio/vad/include/vad.h	2017-01-12 16:03:08.565367666 +0300
+@@ -30,7 +30,7 @@ class Vad {
+ 
+   enum Activity { kPassive = 0, kActive = 1, kError = -1 };
+ 
+-  virtual ~Vad() = default;
++  virtual ~Vad();
+ 
+   // Calculates a VAD decision for the given audio frame. Valid sample rates
+   // are 8000, 16000, and 32000 Hz; the number of samples must be such that the
+Index: webrtc/src/webrtc/common_audio/vad/vad.cc
+===================================================================
+--- webrtc.orig/src/webrtc/common_audio/vad/vad.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/common_audio/vad/vad.cc	2017-01-12 16:03:08.566367661 +0300
+@@ -16,6 +16,9 @@
+ 
+ namespace webrtc {
+ 
++Vad::~Vad() {
++}
++
+ namespace {
+ 
+ class VadImpl final : public Vad {
+Index: webrtc/src/webrtc/base/cryptstring.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/cryptstring.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/base/cryptstring.h	2017-01-12 16:03:08.566367661 +0300
+@@ -153,7 +153,7 @@ class InsecureCryptStringImpl : public C
+   std::string& password() { return password_; }
+   const std::string& password() const { return password_; }
+ 
+-  ~InsecureCryptStringImpl() override = default;
++  ~InsecureCryptStringImpl() override {}
+   size_t GetLength() const override;
+   void CopyTo(char* dest, bool nullterminate) const override;
+   std::string UrlEncode() const override;
+Index: webrtc/src/webrtc/modules/audio_coding/codecs/audio_decoder.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/codecs/audio_decoder.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/codecs/audio_decoder.cc	2017-01-12 16:03:08.566367661 +0300
+@@ -46,6 +46,9 @@ std::vector<AudioDecoder::ParseResult> A
+   return results;
+ }
+ 
++AudioDecoder::~AudioDecoder() {
++}
++
+ int AudioDecoder::Decode(const uint8_t* encoded, size_t encoded_len,
+                          int sample_rate_hz, size_t max_decoded_bytes,
+                          int16_t* decoded, SpeechType* speech_type) {
+Index: webrtc/src/webrtc/modules/audio_coding/codecs/audio_decoder.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/codecs/audio_decoder.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/codecs/audio_decoder.h	2017-01-12 16:03:08.567367656 +0300
+@@ -35,7 +35,7 @@ class AudioDecoder {
+   enum { kNotImplemented = -2 };
+ 
+   AudioDecoder() = default;
+-  virtual ~AudioDecoder() = default;
++  virtual ~AudioDecoder();
+ 
+   class EncodedAudioFrame {
+    public:
+@@ -44,7 +44,7 @@ class AudioDecoder {
+       SpeechType speech_type;
+     };
+ 
+-    virtual ~EncodedAudioFrame() = default;
++    virtual ~EncodedAudioFrame() {}
+ 
+     // Returns the duration in samples-per-channel of this audio frame.
+     // If no duration can be ascertained, returns zero.
+Index: webrtc/src/webrtc/modules/audio_coding/codecs/audio_encoder.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/codecs/audio_encoder.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/codecs/audio_encoder.cc	2017-01-12 16:03:08.567367656 +0300
+@@ -15,6 +15,9 @@
+ 
+ namespace webrtc {
+ 
++AudioEncoder::~AudioEncoder() {
++}
++
+ AudioEncoder::EncodedInfo::EncodedInfo() = default;
+ AudioEncoder::EncodedInfo::EncodedInfo(const EncodedInfo&) = default;
+ AudioEncoder::EncodedInfo::EncodedInfo(EncodedInfo&&) = default;
+Index: webrtc/src/webrtc/modules/audio_coding/codecs/audio_encoder.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/codecs/audio_encoder.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/codecs/audio_encoder.h	2017-01-12 16:03:08.567367656 +0300
+@@ -76,7 +76,7 @@ class AudioEncoder {
+     std::vector<EncodedInfoLeaf> redundant;
+   };
+ 
+-  virtual ~AudioEncoder() = default;
++  virtual ~AudioEncoder();
+ 
+   // Returns the input sample rate in Hz and the number of input channels.
+   // These are constants set at instantiation time.
+Index: webrtc/src/webrtc/modules/audio_coding/include/audio_coding_module.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/include/audio_coding_module.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/include/audio_coding_module.h	2017-01-12 16:03:08.568367652 +0300
+@@ -85,7 +85,7 @@ class AudioCodingModule {
+   static AudioCodingModule* Create(int id);
+   static AudioCodingModule* Create(int id, Clock* clock);
+   static AudioCodingModule* Create(const Config& config);
+-  virtual ~AudioCodingModule() = default;
++  virtual ~AudioCodingModule();
+ 
+   ///////////////////////////////////////////////////////////////////////////
+   //   Utility functions
+Index: webrtc/src/webrtc/modules/audio_coding/acm2/audio_coding_module.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/acm2/audio_coding_module.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/acm2/audio_coding_module.cc	2017-01-12 16:03:08.568367652 +0300
+@@ -1302,6 +1302,9 @@ AudioCodingModule::Config::Config()
+ AudioCodingModule::Config::Config(const Config&) = default;
+ AudioCodingModule::Config::~Config() = default;
+ 
++AudioCodingModule::~AudioCodingModule() {
++}
++
+ // Create module
+ AudioCodingModule* AudioCodingModule::Create(int id) {
+   Config config;
+Index: webrtc/src/webrtc/modules/include/module.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/include/module.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/include/module.h	2017-01-12 16:03:08.569367647 +0300
+@@ -73,7 +73,7 @@ class RefCountedModule : public Module {
+   virtual int32_t Release() const = 0;
+ 
+  protected:
+-  ~RefCountedModule() override = default;
++  ~RefCountedModule() override {}
+ };
+ 
+ }  // namespace webrtc
+Index: webrtc/src/webrtc/base/network.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/network.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/base/network.cc	2017-01-12 16:03:08.569367647 +0300
+@@ -157,6 +157,9 @@ std::string MakeNetworkKey(const std::st
+   return ost.str();
+ }
+ 
++DefaultLocalAddressProvider::~DefaultLocalAddressProvider() {
++}
++
+ NetworkManager::NetworkManager() {
+ }
+ 
+Index: webrtc/src/webrtc/base/network.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/network.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/base/network.h	2017-01-12 16:03:08.570367643 +0300
+@@ -54,7 +54,7 @@ std::string MakeNetworkKey(const std::st
+ 
+ class DefaultLocalAddressProvider {
+  public:
+-  virtual ~DefaultLocalAddressProvider() = default;
++  virtual ~DefaultLocalAddressProvider();
+   // The default local address is the local address used in multi-homed endpoint
+   // when the any address (0.0.0.0 or ::) is used as the local address. It's
+   // important to check the return value as a IP family may not be enabled.
+Index: webrtc/src/webrtc/p2p/stunprober/stunprober.cc
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/stunprober/stunprober.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/p2p/stunprober/stunprober.cc	2017-01-12 16:03:08.570367643 +0300
+@@ -39,6 +39,9 @@ void IncrementCounterByAddress(std::map<
+ 
+ }  // namespace
+ 
++StunProber::Observer::~Observer() {
++}
++
+ // A requester tracks the requests and responses from a single socket to many
+ // STUN servers
+ class StunProber::Requester : public sigslot::has_slots<> {
+Index: webrtc/src/webrtc/p2p/stunprober/stunprober.h
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/stunprober/stunprober.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/p2p/stunprober/stunprober.h	2017-01-12 16:03:08.570367643 +0300
+@@ -63,7 +63,7 @@ class StunProber : public sigslot::has_s
+ 
+   class Observer {
+    public:
+-    virtual ~Observer() = default;
++    virtual ~Observer();
+     virtual void OnPrepared(StunProber* prober, StunProber::Status status) = 0;
+     virtual void OnFinished(StunProber* prober, StunProber::Status status) = 0;
+   };
+Index: webrtc/src/webrtc/media/base/mediachannel.h
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/mediachannel.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/media/base/mediachannel.h	2017-01-12 16:03:08.571367638 +0300
+@@ -879,7 +879,7 @@ struct RtpParameters {
+   std::vector<webrtc::RtpExtension> extensions;
+   // TODO(pthatcher): Add streams.
+   RtcpParameters rtcp;
+-  virtual ~RtpParameters() = default;
++  virtual ~RtpParameters() {}
+ };
+ 
+ // TODO(deadbeef): Rename to RtpSenderParameters, since they're intended to
+Index: webrtc/src/webrtc/media/engine/webrtcvideoengine2.cc
+===================================================================
+--- webrtc.orig/src/webrtc/media/engine/webrtcvideoengine2.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/media/engine/webrtcvideoengine2.cc	2017-01-12 16:03:08.572367633 +0300
+@@ -37,6 +37,13 @@
+ #include "webrtc/video_encoder.h"
+ 
+ namespace cricket {
++
++UnsignalledSsrcHandler::~UnsignalledSsrcHandler() {
++}
++
++DefaultUnsignalledSsrcHandler::~DefaultUnsignalledSsrcHandler() {
++}
++
+ namespace {
+ 
+ // Wrap cricket::WebRtcVideoEncoderFactory as a webrtc::VideoEncoderFactory.
+Index: webrtc/src/webrtc/media/engine/webrtcvideoengine2.h
+===================================================================
+--- webrtc.orig/src/webrtc/media/engine/webrtcvideoengine2.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/media/engine/webrtcvideoengine2.h	2017-01-12 16:03:08.572367633 +0300
+@@ -72,7 +72,7 @@ class UnsignalledSsrcHandler {
+   };
+   virtual Action OnUnsignalledSsrc(WebRtcVideoChannel2* channel,
+                                    uint32_t ssrc) = 0;
+-  virtual ~UnsignalledSsrcHandler() = default;
++  virtual ~UnsignalledSsrcHandler();
+ };
+ 
+ // TODO(pbos): Remove, use external handlers only.
+@@ -85,7 +85,7 @@ class DefaultUnsignalledSsrcHandler : pu
+   rtc::VideoSinkInterface<webrtc::VideoFrame>* GetDefaultSink() const;
+   void SetDefaultSink(VideoMediaChannel* channel,
+                       rtc::VideoSinkInterface<webrtc::VideoFrame>* sink);
+-  virtual ~DefaultUnsignalledSsrcHandler() = default;
++  virtual ~DefaultUnsignalledSsrcHandler();
+ 
+  private:
+   uint32_t default_recv_ssrc_;
+Index: webrtc/src/webrtc/p2p/base/turnserver.cc
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/base/turnserver.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/p2p/base/turnserver.cc	2017-01-12 16:03:08.573367629 +0300
+@@ -117,6 +117,11 @@ static bool InitErrorResponse(const Stun
+   return true;
+ }
+ 
++TurnAuthInterface::~TurnAuthInterface() {
++}
++
++TurnRedirectInterface::~TurnRedirectInterface() {
++}
+ 
+ TurnServer::TurnServer(rtc::Thread* thread)
+     : thread_(thread),
+Index: webrtc/src/webrtc/p2p/base/turnserver.h
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/base/turnserver.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/p2p/base/turnserver.h	2017-01-12 16:03:08.573367629 +0300
+@@ -146,7 +146,7 @@ class TurnAuthInterface {
+   // Return true if the given username and realm are valid, or false if not.
+   virtual bool GetKey(const std::string& username, const std::string& realm,
+                       std::string* key) = 0;
+-  virtual ~TurnAuthInterface() = default;
++  virtual ~TurnAuthInterface();
+ };
+ 
+ // An interface enables Turn Server to control redirection behavior.
+@@ -154,7 +154,7 @@ class TurnRedirectInterface {
+  public:
+   virtual bool ShouldRedirect(const rtc::SocketAddress& address,
+                               rtc::SocketAddress* out) = 0;
+-  virtual ~TurnRedirectInterface() {}
++  virtual ~TurnRedirectInterface();
+ };
+ 
+ // The core TURN server class. Give it a socket to listen on via
+Index: webrtc/src/webrtc/modules/audio_coding/acm2/codec_manager.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/acm2/codec_manager.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/acm2/codec_manager.cc	2017-01-12 16:03:08.573367629 +0300
+@@ -8,6 +8,7 @@
+  *  be found in the AUTHORS file in the root of the source tree.
+  */
+ 
++#include <functional>
+ #include "webrtc/modules/audio_coding/acm2/codec_manager.h"
+ 
+ #include "webrtc/base/checks.h"
+@@ -194,13 +195,11 @@ bool CodecManager::MakeEncoder(RentACode
+   RTC_DCHECK(rac);
+   RTC_DCHECK(acm);
+ 
+-  if (!recreate_encoder_) {
+-    bool error = false;
+-    // Try to re-use the speech encoder we've given to the ACM.
+-    acm->ModifyEncoder([&](std::unique_ptr<AudioEncoder>* encoder) {
++  struct local {
++    static void make_encoder(CodecManager* self, RentACodec* rac, bool& error, std::unique_ptr<AudioEncoder>* encoder) {
+       if (!*encoder) {
+         // There is no existing encoder.
+-        recreate_encoder_ = true;
++        self->recreate_encoder_ = true;
+         return;
+       }
+ 
+@@ -222,12 +221,18 @@ bool CodecManager::MakeEncoder(RentACode
+       }
+ 
+       // Wrap it in a new encoder stack and put it back.
+-      codec_stack_params_.speech_encoder = std::move(enc);
+-      *encoder = rac->RentEncoderStack(&codec_stack_params_);
++      self->codec_stack_params_.speech_encoder = std::move(enc);
++      *encoder = rac->RentEncoderStack(&self->codec_stack_params_);
+       if (!*encoder) {
+         error = true;
+       }
+-    });
++    }
++  };
++
++  if (!recreate_encoder_) {
++    bool error = false;
++    // Try to re-use the speech encoder we've given to the ACM.
++    acm->ModifyEncoder(std::bind(&local::make_encoder, this, rac, std::ref(error), std::placeholders::_1));
+     if (error) {
+       return false;
+     }
+Index: webrtc/src/webrtc/media/base/codec.cc
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/codec.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/media/base/codec.cc	2017-01-12 16:03:08.574367624 +0300
+@@ -88,7 +88,6 @@ Codec::Codec() : id(0), clockrate(0) {}
+ 
+ Codec::Codec(const Codec& c) = default;
+ Codec::Codec(Codec&& c) = default;
+-Codec::~Codec() = default;
+ Codec& Codec::operator=(const Codec& c) = default;
+ Codec& Codec::operator=(Codec&& c) = default;
+ 
+Index: webrtc/src/webrtc/media/base/codec.h
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/codec.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/media/base/codec.h	2017-01-12 16:03:08.574367624 +0300
+@@ -73,7 +73,7 @@ struct Codec {
+   Codec();
+   Codec(const Codec& c);
+   Codec(Codec&& c);
+-  virtual ~Codec();
++  virtual ~Codec() {}
+ 
+   // Indicates if this codec is compatible with the specified codec.
+   bool Matches(const Codec& codec) const;
+@@ -122,7 +122,7 @@ struct AudioCodec : public Codec {
+   AudioCodec();
+   AudioCodec(const AudioCodec& c);
+   AudioCodec(AudioCodec&& c);
+-  virtual ~AudioCodec() = default;
++  virtual ~AudioCodec() {}
+ 
+   // Indicates if this codec is compatible with the specified codec.
+   bool Matches(const AudioCodec& codec) const;
+@@ -150,7 +150,7 @@ struct VideoCodec : public Codec {
+   VideoCodec();
+   VideoCodec(const VideoCodec& c);
+   VideoCodec(VideoCodec&& c);
+-  virtual ~VideoCodec() = default;
++  virtual ~VideoCodec() {}
+ 
+   // Indicates if this video codec is the same as the other video codec, e.g. if
+   // they are both VP8 or VP9, or if they are both H264 with the same H264
+@@ -191,7 +191,7 @@ struct DataCodec : public Codec {
+   DataCodec();
+   DataCodec(const DataCodec& c);
+   DataCodec(DataCodec&& c);
+-  virtual ~DataCodec() = default;
++  virtual ~DataCodec() {}
+ 
+   DataCodec& operator=(const DataCodec& c);
+   DataCodec& operator=(DataCodec&& c);
+Index: webrtc/src/webrtc/base/type_traits.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/type_traits.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/base/type_traits.h	2017-01-12 16:03:08.574367624 +0300
+@@ -36,6 +36,7 @@ class HasDataAndSize {
+   static constexpr bool value = std::is_same<decltype(Test<DS>(0)), int>::value;
+ };
+ 
++#if 0
+ namespace test_has_data_and_size {
+ 
+ template <typename DR, typename SR>
+@@ -71,6 +72,7 @@ static_assert(!HasDataAndSize<Test4, int
+               ".data() and .size() are private");
+ 
+ }  // namespace test_has_data_and_size
++#endif
+ 
+ }  // namespace rtc
+ 
+Index: webrtc/src/webrtc/call/flexfec_receive_stream.cc
+===================================================================
+--- webrtc.orig/src/webrtc/call/flexfec_receive_stream.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/call/flexfec_receive_stream.cc	2017-01-12 16:03:08.574367624 +0300
+@@ -74,7 +74,7 @@ FlexfecReceiveStream::FlexfecReceiveStre
+   LOG(LS_INFO) << "FlexfecReceiveStream: " << config_.ToString();
+ }
+ 
+-FlexfecReceiveStream::~FlexfecReceiveStream() {
++FlexfecReceiveStream::~FlexfecReceiveStream() noexcept {
+   LOG(LS_INFO) << "~FlexfecReceiveStream: " << config_.ToString();
+   Stop();
+ }
+Index: webrtc/src/webrtc/call/flexfec_receive_stream.h
+===================================================================
+--- webrtc.orig/src/webrtc/call/flexfec_receive_stream.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/call/flexfec_receive_stream.h	2017-01-12 16:03:08.575367620 +0300
+@@ -27,7 +27,7 @@ class FlexfecReceiveStream : public webr
+  public:
+   FlexfecReceiveStream(Config configuration,
+                        RecoveredPacketReceiver* recovered_packet_callback);
+-  ~FlexfecReceiveStream();
++  ~FlexfecReceiveStream() noexcept;
+ 
+   const Config& config() const { return config_; }
+ 
+Index: webrtc/src/webrtc/call/call.cc
+===================================================================
+--- webrtc.orig/src/webrtc/call/call.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/call/call.cc	2017-01-12 16:03:08.575367620 +0300
+@@ -66,7 +66,7 @@ class Call : public webrtc::Call,
+              public BitrateAllocator::LimitObserver {
+  public:
+   explicit Call(const Call::Config& config);
+-  virtual ~Call();
++  virtual ~Call() noexcept;
+ 
+   // Implements webrtc::Call.
+   PacketReceiver* Receiver() override;
+@@ -298,7 +298,7 @@ Call::Call(const Call::Config& config)
+   pacer_thread_->Start();
+ }
+ 
+-Call::~Call() {
++Call::~Call() noexcept {
+   RTC_DCHECK(!remb_.InUse());
+   RTC_DCHECK(configuration_thread_checker_.CalledOnValidThread());
+ 
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/audio_network_adaptor_impl.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/audio_network_adaptor_impl.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/audio_network_adaptor_impl.cc	2017-01-12 16:03:08.576367615 +0300
+@@ -28,7 +28,7 @@ AudioNetworkAdaptorImpl::AudioNetworkAda
+   RTC_DCHECK(controller_manager_);
+ }
+ 
+-AudioNetworkAdaptorImpl::~AudioNetworkAdaptorImpl() = default;
++AudioNetworkAdaptorImpl::~AudioNetworkAdaptorImpl() noexcept {}
+ 
+ void AudioNetworkAdaptorImpl::SetUplinkBandwidth(int uplink_bandwidth_bps) {
+   last_metrics_.uplink_bandwidth_bps = rtc::Optional<int>(uplink_bandwidth_bps);
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/audio_network_adaptor_impl.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/audio_network_adaptor_impl.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/audio_network_adaptor_impl.h	2017-01-12 16:03:08.576367615 +0300
+@@ -35,7 +35,7 @@ class AudioNetworkAdaptorImpl final : pu
+       std::unique_ptr<ControllerManager> controller_manager,
+       std::unique_ptr<DebugDumpWriter> debug_dump_writer = nullptr);
+ 
+-  ~AudioNetworkAdaptorImpl() override;
++  ~AudioNetworkAdaptorImpl() noexcept override;
+ 
+   void SetUplinkBandwidth(int uplink_bandwidth_bps) override;
+ 
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller_manager.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/controller_manager.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller_manager.cc	2017-01-12 16:03:08.576367615 +0300
+@@ -234,7 +234,7 @@ ControllerManagerImpl::ControllerManager
+   }
+ }
+ 
+-ControllerManagerImpl::~ControllerManagerImpl() = default;
++ControllerManagerImpl::~ControllerManagerImpl() noexcept {}
+ 
+ std::vector<Controller*> ControllerManagerImpl::GetSortedControllers(
+     const Controller::NetworkMetrics& metrics) {
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller_manager.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/controller_manager.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller_manager.h	2017-01-12 16:03:08.577367610 +0300
+@@ -68,7 +68,7 @@ class ControllerManagerImpl final : publ
+       const std::map<const Controller*, std::pair<int, float>>&
+           chracteristic_points);
+ 
+-  ~ControllerManagerImpl() override;
++  ~ControllerManagerImpl() noexcept override;
+ 
+   // Sort controllers based on their significance.
+   std::vector<Controller*> GetSortedControllers(
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/controller.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller.cc	2017-01-12 16:03:08.577367610 +0300
+@@ -16,4 +16,6 @@ Controller::NetworkMetrics::NetworkMetri
+ 
+ Controller::NetworkMetrics::~NetworkMetrics() = default;
+ 
++Controller::~Controller() {}
++
+ }  // namespace webrtc
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/controller.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/controller.h	2017-01-12 16:03:08.577367610 +0300
+@@ -27,7 +27,7 @@ class Controller {
+     rtc::Optional<int> rtt_ms;
+   };
+ 
+-  virtual ~Controller() = default;
++  virtual ~Controller();
+ 
+   virtual void MakeDecision(
+       const NetworkMetrics& metrics,
+Index: webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/debug_dump_writer.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/audio_network_adaptor/debug_dump_writer.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/audio_coding/audio_network_adaptor/debug_dump_writer.cc	2017-01-12 16:03:08.577367610 +0300
+@@ -47,7 +47,7 @@ void DumpEventToFile(const Event& event,
+ class DebugDumpWriterImpl final : public DebugDumpWriter {
+  public:
+   explicit DebugDumpWriterImpl(FILE* file_handle);
+-  ~DebugDumpWriterImpl() override = default;
++  ~DebugDumpWriterImpl() noexcept override {}
+ 
+   void DumpEncoderRuntimeConfig(
+       const AudioNetworkAdaptor::EncoderRuntimeConfig& config,
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtcp_receiver.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtcp_receiver.h	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtcp_receiver.h	2017-01-12 16:03:08.578367605 +0300
+@@ -44,7 +44,7 @@ class RTCPReceiver {
+         const ReportBlockList& report_blocks) = 0;
+ 
+    protected:
+-    virtual ~ModuleRtpRtcp() = default;
++    virtual ~ModuleRtpRtcp() {}
+   };
+ 
+   RTCPReceiver(Clock* clock,
+Index: webrtc/src/webrtc/modules/utility/source/file_player.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/utility/source/file_player.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/utility/source/file_player.cc	2017-01-12 16:03:08.578367605 +0300
+@@ -27,7 +27,7 @@ namespace {
+ class FilePlayerImpl : public FilePlayer {
+  public:
+   FilePlayerImpl(uint32_t instanceID, FileFormats fileFormat);
+-  ~FilePlayerImpl() override;
++  ~FilePlayerImpl() noexcept override;
+ 
+   int Get10msAudioFromFile(int16_t* outBuffer,
+                            size_t* lengthInSamples,
+@@ -85,7 +85,7 @@ FilePlayerImpl::FilePlayerImpl(const uin
+   _codec.plfreq = 0;
+ }
+ 
+-FilePlayerImpl::~FilePlayerImpl() {
++FilePlayerImpl::~FilePlayerImpl() noexcept {
+   MediaFile::DestroyMediaFile(&_fileModule);
+ }
+ 
+Index: webrtc/src/webrtc/modules/utility/source/file_recorder.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/utility/source/file_recorder.cc	2017-01-12 16:03:08.580367596 +0300
++++ webrtc/src/webrtc/modules/utility/source/file_recorder.cc	2017-01-12 16:03:08.578367605 +0300
+@@ -38,7 +38,7 @@ class CriticalSectionWrapper;
+ class FileRecorderImpl : public FileRecorder {
+  public:
+   FileRecorderImpl(uint32_t instanceID, FileFormats fileFormat);
+-  ~FileRecorderImpl() override;
++  ~FileRecorderImpl() noexcept override;
+ 
+   // FileRecorder functions.
+   int32_t RegisterModuleFileCallback(FileCallback* callback) override;
+@@ -78,7 +78,7 @@ FileRecorderImpl::FileRecorderImpl(uint3
+       _audioEncoder(instanceID),
+       _audioResampler() {}
+ 
+-FileRecorderImpl::~FileRecorderImpl() {
++FileRecorderImpl::~FileRecorderImpl() noexcept {
+   MediaFile::DestroyMediaFile(_moduleFile);
+ }
+ 

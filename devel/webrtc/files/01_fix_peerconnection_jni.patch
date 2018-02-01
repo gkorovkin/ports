@@ -1,0 +1,32 @@
+Index: webrtc/src/webrtc/api/android/jni/peerconnection_jni.cc
+===================================================================
+--- webrtc.orig/src/webrtc/api/android/jni/peerconnection_jni.cc	2017-01-12 16:02:38.884505378 +0300
++++ webrtc/src/webrtc/api/android/jni/peerconnection_jni.cc	2017-01-12 16:02:38.883505383 +0300
+@@ -572,11 +572,11 @@ class CreateSdpObserverWrapper
+  public:
+   CreateSdpObserverWrapper(JNIEnv* jni, jobject j_observer,
+                            ConstraintsWrapper* constraints)
+-      : SdpObserverWrapper(jni, j_observer, constraints) {}
++      : SdpObserverWrapper<CreateSessionDescriptionObserver>(jni, j_observer, constraints) {}
+ 
+   void OnFailure(const std::string& error) override {
+     ScopedLocalRefFrame local_ref_frame(jni());
+-    SdpObserverWrapper::DoOnFailure(std::string("Create"), error);
++    SdpObserverWrapper<CreateSessionDescriptionObserver>::DoOnFailure(std::string("Create"), error);
+   }
+ };
+ 
+@@ -585,11 +585,11 @@ class SetSdpObserverWrapper
+  public:
+   SetSdpObserverWrapper(JNIEnv* jni, jobject j_observer,
+                         ConstraintsWrapper* constraints)
+-      : SdpObserverWrapper(jni, j_observer, constraints) {}
++      : SdpObserverWrapper<SetSessionDescriptionObserver>(jni, j_observer, constraints) {}
+ 
+   void OnFailure(const std::string& error) override {
+     ScopedLocalRefFrame local_ref_frame(jni());
+-    SdpObserverWrapper::DoOnFailure(std::string("Set"), error);
++    SdpObserverWrapper<SetSessionDescriptionObserver>::DoOnFailure(std::string("Set"), error);
+   }
+ };
+ 

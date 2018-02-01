@@ -1,0 +1,13 @@
+Index: webrtc/src/webrtc/media/base/rtputils.cc
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/rtputils.cc	2017-01-12 16:02:59.364410224 +0300
++++ webrtc/src/webrtc/media/base/rtputils.cc	2017-01-12 16:02:59.362410233 +0300
+@@ -257,7 +257,7 @@ bool SetRtpSsrc(void* data, size_t len,
+ // Assumes version 2, no padding, no extensions, no csrcs.
+ bool SetRtpHeader(void* data, size_t len, const RtpHeader& header) {
+   if (!IsValidRtpPayloadType(header.payload_type) ||
+-      header.seq_num < 0 || header.seq_num > UINT16_MAX) {
++      header.seq_num < 0 || header.seq_num > 0xffff) {
+     return false;
+   }
+   return (SetUint8(data, kRtpFlagsOffset, kRtpVersion << 6) &&

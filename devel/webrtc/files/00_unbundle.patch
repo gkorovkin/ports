@@ -1,0 +1,2468 @@
+The point of this patch is to unbundle as many third party libraries as possible so that system libraries are used instead.
+Most of these replacement files were taken from src/build/linux/unbundle.
+
+Additionally this patch makes WebRTC use OpenSSL instead of BoringSSL.
+
+Index: webrtc/src/chromium/src/third_party/ffmpeg/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/ffmpeg/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/ffmpeg/BUILD.gn	2017-01-12 16:02:27.000560869 +0300
+@@ -1,382 +1,30 @@
+-# Copyright 2014 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("ffmpeg_options.gni")
+-import("ffmpeg_generated.gni")
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
+ 
+-# Path to platform configuration files.
+-platform_config_root =
+-    "chromium/config/$ffmpeg_branding/$os_config/$ffmpeg_arch"
+-
+-has_yasm_deps = ffmpeg_yasm_sources != [] && (current_cpu == "x86" || current_cpu == "x64") && os_config != "linux-noasm"
+-if (has_yasm_deps) {
+-  import("//third_party/yasm/yasm_assemble.gni")
+-  yasm_assemble("ffmpeg_yasm") {
+-    sources = ffmpeg_yasm_sources
+-
+-    # Ensure the architecture defines go in the command line before the -P
+-    # file below, so don't use defines.
+-    yasm_flags = []
+-    if (current_cpu == "x86") {
+-      yasm_flags += [ "-DARCH_X86_32" ]
+-    } else if (current_cpu == "x64") {
+-      yasm_flags += [ "-DARCH_X86_64" ]
+-    }
+-
+-    inputs = [
+-      # Sets visibility hidden for cglobal functions. Explicitly included
+-      # to avoid overlooking changes to this file in incremental builds.
+-      "libavutil/x86/x86inc.asm",
+-    ]
+-
+-    defines = [ "PIC" ]
+-    include_dirs = [
+-      platform_config_root,
+-      "libavcodec/x86",
+-      "libavutil/x86",
+-      ".",
+-    ]
+-
+-    # Disable warnings, prevents log spam for things we won't fix.
+-    yasm_flags += [
+-      "-w",
+-      "-P", rebase_path("$platform_config_root/config.asm", root_build_dir),
+-    ]
+-
+-    if (is_mac) {
+-      # Necessary to ensure symbols end up with a _ prefix; added by
+-      # yasm_assemble.gni for Windows, but not Mac.
+-      defines += [ "PREFIX" ]
+-    }
+-  }
+-}
+-
+-config("ffmpeg_dependent_config") {
+-  include_dirs = [
+-    platform_config_root,
+-    ".",
++pkg_config("system_ffmpeg") {
++  packages = [
++    "libavcodec",
++    "libavformat",
++    "libavutil",
+   ]
+ }
+ 
+-if (is_win) {
+-  # Stub generator script and signatures of all functions used by Chrome.
+-  generate_stubs_script = "//tools/generate_stubs/generate_stubs.py"
+-
+-  # Used by ffmpeg_generate_stubs and ffmpeg_generate_def
+-  sig_files = [ "chromium/ffmpeg.sigs" ]
+-
+-  action("ffmpeg_generate_def") {
+-    script = generate_stubs_script
+-    sources = sig_files
+-    outputs = [ "$target_gen_dir/ffmpeg.def" ]
+-    args = [
+-  # TODO(ajwong): This was -i <(INTERMEDIATE_DIR). What next?
+-      "-i", rebase_path(target_out_dir, root_build_dir),
+-      "-o", rebase_path(target_gen_dir, root_build_dir),
+-      "-t", "windows_def",
+-      "-m", "ffmpeg.dll",
+-    ] + rebase_path(sources, root_build_dir)
+-  }
+-}
+-
+-# gn orders flags on a target before flags from configs. The default config
+-# adds -Wall, and these flags have to be after -Wall -- so they need to come
+-# from a config and can't be on the target directly.
+-config("ffmpegsumo_warnings") {
+-  if (is_clang) {
+-    cflags = [
+-      "-Wno-absolute-value",
+-      # ffmpeg uses its own deprecated functions.
+-      "-Wno-deprecated-declarations",
+-      # ffmpeg doesn't care about pointer constness.
+-      "-Wno-incompatible-pointer-types",
+-      # ffmpeg doesn't follow usual parentheses conventions.
+-      "-Wno-logical-op-parentheses",
+-      # ffmpeg doesn't care about pointer signedness.
+-      "-Wno-parentheses",
+-      # ffmpeg doesn't care about pointer signedness.
+-      "-Wno-pointer-sign",
+-      # ffmpeg doesn't believe in exhaustive switch statements.
+-      "-Wno-switch",
+-      # matroskadec.c has a "failed:" label that's only used if some
+-      # CONFIG_ flags we don't set are set.
+-      "-Wno-unused-label",
+-      # ffmpeg has a lot of unused variables.
+-      "-Wno-unused-variable",
+-      # This fires on `av_assert0(!"valid element size")` in utils.c
+-      "-Wno-string-conversion",
+-      # This fires on `pos_min` and `pos_max` in
+-      # autorename_libavformat_utils.c
+-      "-Wno-sometimes-uninitialized",
+-      # ffmpeg contains static functions in header files, which lead
+-      # to unused function warnings. There are a few legit unused
+-      # functions too.
+-      "-Wno-unused-function",
+-      # vp3data.h's vp31_inter_dequant stores '128' in an int8_t array.
+-      "-Wno-constant-conversion",
+-    ]
+-    if (is_win) {
+-      # This corresponds to /wd4273 below.
+-      cflags += [ "-Wno-inconsistent-dllimport" ]
+-    }
+-  }
+-}
+-
+-if (is_component_ffmpeg) {
+-  link_target_type = "source_set"
+-} else {
+-  # This must be a static_library in non-component builds to avoid pulling
+-  # in many large global arrays (and associated code) into chrome.dll.
+-  link_target_type = "static_library"
+-}
+-target(link_target_type, "ffmpeg_internal") {
+-  sources = ffmpeg_c_sources + ffmpeg_gas_sources + [
+-    "$platform_config_root/config.h",
+-    "$platform_config_root/libavutil/avconfig.h",
+-  ]
+-  include_dirs = [
+-    platform_config_root,
+-    ".",
++shim_headers("ffmpeg_shim") {
++  root_path = "."
++  headers = [
++    "libavcodec/avcodec.h",
++    "libavformat/avformat.h",
++    "libavutil/imgutils.h",
+   ]
+-  defines = [
+-    "HAVE_AV_CONFIG_H",
+-    "_POSIX_C_SOURCE=200112",
+-    "_XOPEN_SOURCE=600",
+-    "PIC",
+-    # Disable deprecated features that generate spammy warnings.
+-    # media/ffmpeg/ffmpeg_common.h defines these as well and must be kept
+-    # in sync with this file.
+-    "FF_API_CONVERGENCE_DURATION=0",
+-    # Upstream libavcodec/utils.c still uses the deprecated
+-    # av_dup_packet(), causing deprecation warnings.
+-    # The normal fix for such things is to disable the feature as below,
+-    # but the upstream code does not yet compile with it disabled.
+-    # (In this case, the fix is replacing the call with a new function.)
+-    # In the meantime, we directly disable those warnings in the C file.
+-    # "FF_API_AVPACKET_OLD_API=0",
+-  ]
+-
+-  # So we can append below and assume they're defined.
+-  cflags = []
+-  ldflags = []
+-  libs = []
+-  deps = []
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    # These must be after no_chromium_code for warning flags to be ordered
+-    # correctly.
+-    "//build/config/compiler:no_incompatible_pointer_warnings",
+-    ":ffmpegsumo_warnings",
+-  ]
+-
+-  # Since we are not often debugging FFmpeg, and performance is
+-  # unacceptable without optimization, freeze the optimizations to -O2.
+-  # If someone really wants -O1 , they can change these in their checkout.
+-  # If you want -O0, see the Gotchas in README.Chromium for why that
+-  # won't work.
+-  #
+-  # In addition to the above reasons, /Od optimization won't remove symbols
+-  # that are under "if (0)" style sections.  Which lead to link time errors
+-  # when for example it tries to link an ARM symbol on X86.
+-  configs -= [ "//build/config/compiler:default_optimization" ]
+-  if (is_win) {
+-    # Setting the optimizations to 'speed' or to 'max' on Windows results in
+-    # a lot of unresolved symbols. The only supported mode is 'size' (see
+-    # crbug.com/264459).
+-    #
+-    # FFMmpeg require dead code elimination to be available in all build modes
+-    # and thus doesn't support wpo.
+-    configs += [ "//build/config/compiler:optimize_no_wpo" ]
+-  } else {
+-    configs += [ "//build/config/compiler:optimize_max" ]
+-  }
+-
+-  if (is_posix) {
+-    # Remove default stack frames config so we can force -fomit-frame-pointer.
+-    configs -= [ "//build/config/compiler:default_stack_frames" ]
+-
+-    cflags += [
+-      "-fPIC",
+-      "-fomit-frame-pointer",
+-      # ffmpeg uses its own deprecated functions.
+-      "-Wno-deprecated-declarations",
+-    ]
+-
+-    if (!is_clang) {
+-      # gcc doesn't have flags for specific warnings, so disable them
+-      # all.
+-      cflags += [ "-w" ]
+-    }
+-
+-    if (current_cpu == "arm" || current_cpu == "arm64") {
+-      asmflags = []
+-      if (arm_float_abi == "hard") {
+-        asmflags += [ "-DHAVE_VFP_ARGS=1" ]
+-      } else {
+-        asmflags += [ "-DHAVE_VFP_ARGS=0" ]
+-      }
+-      if (is_clang) {
+-        # TODO(hans) Enable integrated-as (crbug.com/124610).
+-        asmflags += [ "-fno-integrated-as" ]
+-        if (is_android) {
+-          import("//build/config/android/config.gni")
+-          rebased_android_toolchain_root =
+-              rebase_path(android_toolchain_root, root_build_dir)
+-          # Else /usr/bin/as gets picked up.
+-          asmflags += [ "-B${rebased_android_toolchain_root}/bin" ]
+-        }
+-      }
+-    }
+-  }
+-
+-  if (is_posix && !is_mac) {
+-    defines += [
+-      "_ISOC99_SOURCE",
+-      "_LARGEFILE_SOURCE",
+-      # BUG(ihf): ffmpeg compiles with this define. But according to
+-      # ajwong: I wouldn't change _FILE_OFFSET_BITS.  That's a scary change
+-      # cause it affects the default length of off_t, and fpos_t,
+-      # which can cause strange problems if the loading code doesn't
+-      # have it set and you start passing FILE*s or file descriptors
+-      # between symbol contexts.
+-      # "_FILE_OFFSET_BITS=64",
+-    ]
+-    cflags += [
+-      "-std=c99",
+-      "-pthread",
+-      "-fno-math-errno",
+-      "-fno-signed-zeros",
+-      "-fno-tree-vectorize",
+-      "-fomit-frame-pointer",
+-    ]
+-    ldflags = [
+-      "-L", rebase_path(target_gen_dir, root_build_dir),
+-    ]
+-    if (!is_android) {
+-      # OS=android requires that both -lz and -lm occur after
+-      # -lc++_shared on the link command line. Android link rules
+-      # already include -lm, and we get -lz as a transitive dependency
+-      # of libandroid.so, so simply moving both to the non-Android
+-      # section solves the problem.
+-      #
+-      # The root cause of this problem is certain system libraries
+-      # (libm starting with MNC and libz before MNC, among others)
+-      # re-export the libgcc unwinder, and libc++ exports the
+-      # libc++abi unwinder. As we build against libc++ headers, libc++
+-      # must be the first in the runtime symbol lookup order (among
+-      # all unwinder-providing libraries).
+-
+-      # librt for clock_gettime on precise
+-      libs += [ "m", "z", "rt" ]
+-    }
+-    if (is_component_ffmpeg) {
+-      # Export all symbols when building as component.
+-      configs -= [ "//build/config/gcc:symbol_visibility_hidden" ]
+-      configs += [ "//build/config/gcc:symbol_visibility_default" ]
+-    }
+-    # TODO(ajwong): How to handle openbsd? Especially w/o the is_posix?
+-    #      if (is_openbsd) {
+-    #       # OpenBSD's gcc (4.2.1) does not support this flag
+-    #       cflags -= [ "-fno-signed-zeros" ]
+-    #      }
+-  }
+-  if (is_mac) {
+-    if (is_component_ffmpeg) {
+-      # Export all symbols when building as component.
+-      configs -= [ "//build/config/gcc:symbol_visibility_hidden" ]
+-      configs += [ "//build/config/gcc:symbol_visibility_default" ]
+-    }
+-
+-    defines += [ "_DARWIN_C_SOURCE" ]
+-  } else if (is_win) {
+-    import("//build/config/win/visual_studio_version.gni")
+-
+-    if ((visual_studio_version == "2013") || (visual_studio_version == "2013e")) {
+-      defines += [
+-        # VS 2015 supports these natively so they cannot be #defines.
+-        "inline=__inline",
+-        "strtoll=_strtoi64",
+-        "strtod=avpriv_strtod",
+-        "snprintf=avpriv_snprintf",
+-        "vsnprintf=avpriv_vsnprintf",
+-        # This leads to duplicate avpriv_snprintf definitions due to inline
+-        # _snprintf in VC++ 2015 stdio.h.
+-        "_snprintf=avpriv_snprintf",
+-      ]
+-    }
+-    defines += [
+-      "_ISOC99_SOURCE",
+-      "_LARGEFILE_SOURCE",
+-      "HAVE_AV_CONFIG_H",
+-    ]
+-
+-    if (is_component_ffmpeg) {
+-      # Required to avoid 4049 and 4217 errors around redundant imports.
+-      cflags += [ "/FIcompat/msvcrt/snprintf.h", "/FIcompat/msvcrt/strtod.h" ]
+-    }
+-
+-    # TODO(dalecurtis): We should fix these.  http://crbug.com/154421
+-    cflags += [
+-      "/wd4996", # 'function': was declared deprecated
+-      "/wd4018", # 'expression': signed/unsigned mismatch
+-      "/wd4090", # 'operation' : different 'modifier' qualifiers
+-      "/wd4305", # 'identifier': truncation from 'type1' to 'type2'
+-      "/wd4133", # 'type' : incompatible types - from 'type1' to 'type2'
+-      "/wd4146", # unary minus operator applied to unsigned type, result
+-                 #   still unsigned
+-      "/wd4554", # 'operator' : check operator precedence for possible
+-                 #   error; use parentheses to clarify precedence
+-      "/wd4028", # formal parameter 'number' different from declaration
+-      "/wd4334", # 'operator' : result of 32-bit shift implicitly
+-                 #   converted to 64 bits (was 64-bit shift intended?)
+-      "/wd4101", # 'identifier' : unreferenced local variable
+-      "/wd4102", # 'label' : unreferenced label
+-      "/wd4116", # unnamed type definition in parentheses
+-      "/wd4307", # 'operator' : integral constant overflow
+-      "/wd4273", # 'function' : inconsistent DLL linkage
+-      "/wd4005", # 'identifier' : macro redefinition
+-      "/wd4056", # overflow in floating point constant arithmetic
+-      "/wd4756", # overflow in constant arithmetic
+-    ]
+-    if (current_cpu == "x64") {
+-      # TODO(wolenetz): We should fix this.  http://crbug.com/171009
+-      cflags += [
+-        "/wd4267"  # Conversion from size_t to 'type'.
+-      ]
+-    }
+-  }
+-
+-  if (has_yasm_deps) {
+-    deps += [ ":ffmpeg_yasm" ]
+-  }
+ }
+ 
+-if (is_component_ffmpeg) {
+-  shared_library("ffmpeg") {
+-    public_configs = [ ":ffmpeg_dependent_config" ]
+-    deps = [ ":ffmpeg_internal" ]
+-
+-    # So we can append below and assume they're defined.
+-    ldflags = []
+-
+-    if (is_posix && !is_mac) {
+-      # Fixes warnings PIC relocation when building as component.
+-      ldflags += [
+-        "-Wl,-Bsymbolic",
+-        "-L", rebase_path(target_gen_dir, root_build_dir),
+-      ]
+-    } else if (is_win) {
+-      # Windows component build needs the .def file to export ffmpeg symbols.
+-      deps += [ ":ffmpeg_generate_def" ]
+-      sources = [ "$target_gen_dir/ffmpeg.def" ]
+-    }
+-  }
+-} else {
+-  source_set("ffmpeg") {
+-    public_configs = [ ":ffmpeg_dependent_config" ]
+-    deps = [ ":ffmpeg_internal" ]
+-  }
++source_set("ffmpeg") {
++  deps = [
++    ":ffmpeg_shim",
++  ]
++  public_configs = [ ":system_ffmpeg" ]
+ }
+Index: webrtc/src/chromium/src/third_party/expat/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/expat/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/expat/BUILD.gn	2017-01-12 16:02:27.001560865 +0300
+@@ -1,53 +1,13 @@
+-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("//build/config/chromecast_build.gni")
+-import("//testing/libfuzzer/fuzzer_test.gni")
++import("//build/config/linux/pkg_config.gni")
+ 
+-# On Linux, we implicitly already depend on expat via fontconfig;
+-# let's not pull it in twice.
+-# Chromecast doesn't ship expat as a system library.
+-# Libfuzzer and AFL need to build library from sources.
+-if (is_linux && !is_chromecast && !use_libfuzzer && !use_afl) {
+-  config("expat_config") {
+-    libs = [ "expat" ]
+-  }
+-
+-  group("expat") {
+-    public_configs = [ ":expat_config" ]
+-  }
+-} else {
+-  config("expat_config") {
+-    include_dirs = [ "files/lib" ]
+-    defines = [ "XML_STATIC" ]
+-  }
+-
+-  static_library("expat") {
+-    sources = [
+-      "files/lib/expat.h",
+-      "files/lib/xmlparse.c",
+-      "files/lib/xmlrole.c",
+-      "files/lib/xmltok.c",
+-    ]
+-
+-    public_configs = [ ":expat_config" ]
+-
+-    defines = [ "_LIB" ]
+-    if (is_win) {
+-      defines += [ "COMPILED_FROM_DSP" ]
+-    } else {
+-      defines += [ "HAVE_EXPAT_CONFIG_H" ]
+-    }
+-  }
++pkg_config("system_expat") {
++  packages = [ "expat" ]
+ }
+ 
+-fuzzer_test("expat_xml_parse_fuzzer") {
+-  sources = [
+-    "fuzz/expat_xml_parse_fuzzer.cc",
+-  ]
+-  deps = [
+-    ":expat",
+-  ]
+-  dict = "//testing/libfuzzer/fuzzers/dicts/xml.dict"
++group("expat") {
++  public_configs = [ ":system_expat" ]
+ }
+Index: webrtc/src/chromium/src/third_party/yasm/yasm_assemble.gni
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/yasm/yasm_assemble.gni	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/yasm/yasm_assemble.gni	2017-01-12 16:02:27.001560865 +0300
+@@ -1,105 +1,23 @@
+-# Copyright 2014 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-# This provides the yasm_assemble() template which uses YASM to assemble
+-# assembly files.
+-#
+-# Files to be assembled with YASM should have an extension of .asm.
+-#
+-# Parameters
+-#
+-#   yasm_flags (optional)
+-#       [list of strings] Pass additional flags into YASM. These are appended
+-#       to the command line. Note that the target machine type and system is
+-#       already set up based on the current toolchain so you don't need to
+-#       specify these things (see below).
+-#
+-#       Example: yasm_flags = [ "--force-strict" ]
+-#
+-#   include_dirs (optional)
+-#       [list of dir names] List of additional include dirs. Note that the
+-#       source root and the root generated file dir is always added, just like
+-#       our C++ build sets up.
+-#
+-#       Example: include_dirs = [ "//some/other/path", target_gen_dir ]
+-#
+-#   defines (optional)
+-#       [list of strings] List of defines, as with the native code defines.
+-#
+-#       Example: defines = [ "FOO", "BAR=1" ]
+-#
+-#   inputs, deps, visibility  (optional)
+-#       These have the same meaning as in an action.
+-#
+-# Example
+-#
+-#   yasm_assemble("my_yasm_target") {
+-#     sources = [
+-#       "ultra_optimized_awesome.asm",
+-#     ]
+-#     include_dirs = [ "assembly_include" ]
+-#   }
+-
+-if (is_mac || is_ios) {
+-  if (current_cpu == "x86") {
+-    _yasm_flags = [
+-      "-fmacho32",
+-      "-m",
+-      "x86",
+-    ]
+-  } else if (current_cpu == "x64") {
+-    _yasm_flags = [
+-      "-fmacho64",
+-      "-m",
+-      "amd64",
+-    ]
+-  }
+-} else if (is_posix) {
+-  if (current_cpu == "x86") {
+-    _yasm_flags = [
+-      "-felf32",
+-      "-m",
+-      "x86",
+-    ]
+-  } else if (current_cpu == "x64") {
+-    _yasm_flags = [
+-      "-DPIC",
+-      "-felf64",
+-      "-m",
+-      "amd64",
+-    ]
+-  }
+-} else if (is_win) {
+-  if (current_cpu == "x86") {
+-    _yasm_flags = [
+-      "-DPREFIX",
+-      "-fwin32",
+-      "-m",
+-      "x86",
+-    ]
+-  } else if (current_cpu == "x64") {
+-    _yasm_flags = [
+-      "-fwin64",
+-      "-m",
+-      "amd64",
+-    ]
+-  }
+-}
+-
+-if (is_win) {
+-  asm_obj_extension = "obj"
+-} else {
+-  asm_obj_extension = "o"
++if (current_cpu == "x86") {
++  _yasm_flags = [
++    "-felf32",
++    "-m",
++    "x86",
++  ]
++} else if (current_cpu == "x64") {
++  _yasm_flags = [
++    "-DPIC",
++    "-felf64",
++    "-m",
++    "amd64",
++  ]
+ }
+ 
+ template("yasm_assemble") {
+-  assert(defined(invoker.sources), "Need sources defined for $target_name")
+-
+-  # Only depend on YASM on x86 systems. Force compilation of .asm files for
+-  # ARM to fail.
+-  assert(current_cpu == "x86" || current_cpu == "x64")
+-
+   action_name = "${target_name}_action"
+   source_set_name = target_name
+ 
+@@ -114,24 +32,12 @@ template("yasm_assemble") {
+       inputs = invoker.inputs
+     }
+ 
+-    # Executable (first in the args). The binary might be in the root build dir
+-    # (no cross-compiling) or in a toolchain-specific subdirectory of that
+-    # (when cross-compiling).
+-    yasm_label = "//third_party/yasm($host_toolchain)"
+-    args = [ "./" +  # Force current dir.
+-             rebase_path(get_label_info(yasm_label, "root_out_dir") + "/yasm",
+-                         root_build_dir) ]
+-
+-    # Deps.
+-    deps = [
+-      yasm_label,
+-    ]
++    deps = []
+     if (defined(invoker.deps)) {
+       deps += invoker.deps
+     }
+ 
+-    # Flags.
+-    args += _yasm_flags
++    args = [ "yasm" ] + _yasm_flags
+     if (defined(invoker.yasm_flags)) {
+       args += invoker.yasm_flags
+     }
+Index: webrtc/src/chromium/src/third_party/zlib/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/zlib/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/zlib/BUILD.gn	2017-01-12 16:02:27.001560865 +0300
+@@ -1,138 +1,43 @@
+-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-config("zlib_config") {
+-  include_dirs = [ "." ]
+-}
+-
+-static_library("zlib_x86_simd") {
+-  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+-    sources = [
+-      "crc_folding.c",
+-      "fill_window_sse.c",
+-    ]
+-    if (!is_win || is_clang) {
+-      cflags = [
+-        "-msse4.2",
+-        "-mpclmul",
+-      ]
+-    }
+-  } else {
+-    sources = [
+-      "simd_stub.c",
+-    ]
+-  }
++import("//build/shim_headers.gni")
+ 
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
++shim_headers("zlib_shim") {
++  root_path = "."
++  headers = [ "zlib.h" ]
+ }
+ 
+-config("zlib_warnings") {
+-  if (is_clang && !is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+-    cflags = [ "-Wno-incompatible-pointer-types" ]
+-  }
++config("system_zlib") {
++  defines = [ "USE_SYSTEM_ZLIB=1" ]
+ }
+ 
+-static_library("zlib") {
+-  if (!is_win) {
+-    # Don't stomp on "libzlib" on other platforms.
+-    output_name = "chrome_zlib"
+-  }
+-
+-  sources = [
+-    "adler32.c",
+-    "compress.c",
+-    "crc32.c",
+-    "crc32.h",
+-    "deflate.c",
+-    "deflate.h",
+-    "gzclose.c",
+-    "gzguts.h",
+-    "gzlib.c",
+-    "gzread.c",
+-    "gzwrite.c",
+-    "infback.c",
+-    "inffast.c",
+-    "inffast.h",
+-    "inffixed.h",
+-    "inflate.c",
+-    "inflate.h",
+-    "inftrees.c",
+-    "inftrees.h",
+-    "mozzconf.h",
+-    "trees.c",
+-    "trees.h",
+-    "uncompr.c",
+-    "x86.h",
+-    "zconf.h",
+-    "zlib.h",
+-    "zutil.c",
+-    "zutil.h",
+-  ]
+-
+-  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+-    sources += [ "x86.c" ]
+-  }
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-
+-    # Must be after no_chromium_code for warning flags to be ordered correctly.
+-    ":zlib_warnings",
+-  ]
+-
+-  public_configs = [ ":zlib_config" ]
++source_set("zlib") {
+   deps = [
+-    ":zlib_x86_simd",
++    ":zlib_shim",
+   ]
++  libs = [ "z" ]
++  public_configs = [ ":system_zlib" ]
+ }
+ 
+-config("minizip_warnings") {
+-  visibility = [ ":*" ]
+-  if (is_clang) {
+-    # zlib uses `if ((a == b))` for some reason.
+-    cflags = [ "-Wno-parentheses-equality" ]
+-  }
+-}
+-
+-static_library("minizip") {
+-  sources = [
+-    "contrib/minizip/ioapi.c",
+-    "contrib/minizip/ioapi.h",
+-    "contrib/minizip/iowin32.c",
+-    "contrib/minizip/iowin32.h",
+-    "contrib/minizip/unzip.c",
+-    "contrib/minizip/unzip.h",
+-    "contrib/minizip/zip.c",
+-    "contrib/minizip/zip.h",
++shim_headers("minizip_shim") {
++  root_path = "contrib"
++  headers = [
++    "minizip/crypt.h",
++    "minizip/ioapi.h",
++    "minizip/iowin32.h",
++    "minizip/mztools.h",
++    "minizip/unzip.h",
++    "minizip/zip.h",
+   ]
++}
+ 
+-  if (!is_win) {
+-    sources -= [
+-      "contrib/minizip/iowin32.c",
+-      "contrib/minizip/iowin32.h",
+-    ]
+-  }
+-  if (is_mac || is_ios || is_android) {
+-    # Mac, Android and the BSDs don't have fopen64, ftello64, or fseeko64. We
+-    # use fopen, ftell, and fseek instead on these systems.
+-    defines = [ "USE_FILE32API" ]
+-  }
+-
++source_set("minizip") {
+   deps = [
+-    ":zlib",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-
+-    # Must be after no_chromium_code for warning flags to be ordered correctly.
+-    ":minizip_warnings",
++    ":minizip_shim",
+   ]
+-  public_configs = [ ":zlib_config" ]
++  libs = [ "minizip" ]
+ }
+ 
+ static_library("zip") {
+Index: webrtc/src/chromium/src/third_party/jsoncpp/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/jsoncpp/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/jsoncpp/BUILD.gn	2017-01-12 16:02:27.001560865 +0300
+@@ -1,35 +1,32 @@
+-# Copyright 2014 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-config("jsoncpp_config") {
+-  include_dirs = [
+-    "overrides/include",
+-    "source/include",
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
++
++pkg_config("system_jsoncpp") {
++  packages = [ "jsoncpp" ]
++}
++
++shim_headers("jsoncpp_shim") {
++  root_path = "source/include"
++  headers = [
++    "json/assertions.h",
++    "json/autolink.h",
++    "json/config.h",
++    "json/features.h",
++    "json/forwards.h",
++    "json/json.h",
++    "json/reader.h",
++    "json/value.h",
++    "json/writer.h",
+   ]
+ }
+ 
+ source_set("jsoncpp") {
+-  sources = [
+-    "overrides/include/json/value.h",
+-    "overrides/src/lib_json/json_reader.cpp",
+-    "overrides/src/lib_json/json_value.cpp",
+-    "source/include/json/assertions.h",
+-    "source/include/json/autolink.h",
+-    "source/include/json/config.h",
+-    "source/include/json/features.h",
+-    "source/include/json/forwards.h",
+-    "source/include/json/json.h",
+-    "source/include/json/reader.h",
+-    "source/include/json/writer.h",
+-    "source/src/lib_json/json_batchallocator.h",
+-    "source/src/lib_json/json_tool.h",
+-    "source/src/lib_json/json_writer.cpp",
++  deps = [
++    ":jsoncpp_shim",
+   ]
+-
+-  public_configs = [ ":jsoncpp_config" ]
+-
+-  defines = [ "JSON_USE_EXCEPTION=0" ]
+-
+-  include_dirs = [ "source/src/lib_json" ]
++  public_configs = [ ":system_jsoncpp" ]
+ }
+Index: webrtc/src/chromium/src/third_party/openssl/BUILD.gn
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ webrtc/src/chromium/src/third_party/openssl/BUILD.gn	2017-01-12 16:02:27.001560865 +0300
+@@ -0,0 +1,13 @@
++# Copyright 2016 The Chromium Authors. All rights reserved.
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++import("//build/config/linux/pkg_config.gni")
++
++pkg_config("system_openssl") {
++  packages = [ "openssl" ]
++}
++
++component("openssl") {
++  public_configs = [ ":system_openssl" ]
++}
+Index: webrtc/src/chromium/src/third_party/usrsctp/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/usrsctp/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/usrsctp/BUILD.gn	2017-01-12 16:02:27.001560865 +0300
+@@ -129,6 +129,6 @@ static_library("usrsctp") {
+   }
+ 
+   deps = [
+-    "//third_party/boringssl",
++    "//third_party/openssl",
+   ]
+ }
+Index: webrtc/src/webrtc/base/BUILD.gn
+===================================================================
+--- webrtc.orig/src/webrtc/base/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/webrtc/base/BUILD.gn	2017-01-12 16:02:27.002560860 +0300
+@@ -77,7 +77,7 @@ if (is_linux && !build_with_chromium) {
+   # WebRTC cannot use as we don't sync src/crypto from Chromium.
+   group("linux_system_ssl") {
+     deps = [
+-      "//third_party/boringssl",
++      "//third_party/openssl",
+     ]
+   }
+ }
+@@ -615,7 +615,7 @@ rtc_static_library("rtc_base") {
+   }  # !build_with_chromium
+ 
+   if (rtc_build_ssl) {
+-    deps += [ "//third_party/boringssl" ]
++    deps += [ "//third_party/openssl" ]
+   } else {
+     configs += [ ":external_ssl_library" ]
+   }
+Index: webrtc/src/chromium/src/base/third_party/libevent/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/base/third_party/libevent/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/base/third_party/libevent/BUILD.gn	2017-01-12 16:02:27.002560860 +0300
+@@ -1,55 +1,22 @@
+-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("//build/config/nacl/config.gni")
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
+ 
+-static_library("libevent") {
+-  sources = [
+-    "buffer.c",
+-    "evbuffer.c",
+-    "evdns.c",
+-    "event.c",
+-    "event_tagging.c",
+-    "evrpc.c",
+-    "evutil.c",
+-    "http.c",
+-    "log.c",
+-    "poll.c",
+-    "select.c",
+-    "signal.c",
+-    "strlcpy.c",
+-  ]
+-
+-  defines = [ "HAVE_CONFIG_H" ]
++pkg_config("system_libevent") {
++  packages = [ "libevent" ]
++}
+ 
+-  if (is_mac || is_ios) {
+-    sources += [ "kqueue.c" ]
+-    include_dirs = [ "mac" ]
+-  } else if (is_linux) {
+-    sources += [ "epoll.c" ]
+-    include_dirs = [ "linux" ]
+-  } else if (is_android) {
+-    sources += [ "epoll.c" ]
+-    include_dirs = [ "android" ]
+-  } else if (is_nacl_nonsfi) {
+-    sources -= [
+-      "evdns.c",
+-      "event_tagging.c",
+-      "evrpc.c",
+-      "http.c",
+-      "select.c",
+-      "signal.c",
+-    ]
+-    sources += [
+-      "nacl_nonsfi/config.h",
+-      "nacl_nonsfi/event-config.h",
+-      "nacl_nonsfi/random.c",
+-      "nacl_nonsfi/signal_stub.c",
+-    ]
+-    include_dirs = [ "nacl_nonsfi" ]
+-  }
++shim_headers("libevent_shim") {
++  root_path = "."
++  headers = [ "event.h" ]
++}
+ 
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
++source_set("libevent") {
++  deps = [
++    ":libevent_shim",
++  ]
++  public_configs = [ ":system_libevent" ]
+ }
+Index: webrtc/src/chromium/src/third_party/openh264/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/openh264/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/openh264/BUILD.gn	2017-01-12 16:02:27.002560860 +0300
+@@ -1,269 +1,42 @@
+-# Copyright 2015 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
+ import("//third_party/openh264/openh264_args.gni")
+ 
+-# Config shared by all openh264 targets.
+-config("config") {
+-  cflags = []
+-  defines = []
+-
+-  # GCC and clang flags. MSVS (is_win && !is_clang) does not use cflags.
+-  if (!is_win || is_clang) {
+-    cflags += [
+-      "-Wno-format",
+-      "-Wno-header-hygiene",
+-      "-Wno-unused-function",
+-      "-Wno-unused-value",
+-    ]
+-  }
+-
+-  # Platform-specific defines.
+-  if (is_android) {
+-    # Android NDK is necessary for its cpufeatures and this define is what
+-    # OpenH264 code uses to check if it should be used.
+-    defines += [ "ANDROID_NDK" ]
+-  }
++pkg_config("system_openh264") {
++  packages = [ "openh264" ]
+ }
+ 
+-source_set("common") {
+-  sources = [
+-    "src/codec/common/inc/WelsCircleQueue.h",
+-    "src/codec/common/inc/WelsList.h",
+-    "src/codec/common/inc/WelsLock.h",
+-    "src/codec/common/inc/WelsTask.h",
+-    "src/codec/common/inc/WelsTaskThread.h",
+-    "src/codec/common/inc/WelsThread.h",
+-    "src/codec/common/inc/WelsThreadLib.h",
+-    "src/codec/common/inc/WelsThreadPool.h",
+-    "src/codec/common/inc/copy_mb.h",
+-    "src/codec/common/inc/cpu.h",
+-    "src/codec/common/inc/cpu_core.h",
+-    "src/codec/common/inc/crt_util_safe_x.h",
+-    "src/codec/common/inc/deblocking_common.h",
+-    "src/codec/common/inc/expand_pic.h",
+-    "src/codec/common/inc/golomb_common.h",
+-    "src/codec/common/inc/intra_pred_common.h",
+-    "src/codec/common/inc/ls_defines.h",
+-    "src/codec/common/inc/macros.h",
+-    "src/codec/common/inc/mc.h",
+-    "src/codec/common/inc/measure_time.h",
+-    "src/codec/common/inc/memory_align.h",
+-    "src/codec/common/inc/sad_common.h",
+-    "src/codec/common/inc/typedefs.h",
+-    "src/codec/common/inc/utils.h",
+-    "src/codec/common/inc/version.h",
+-    "src/codec/common/inc/welsCodecTrace.h",
+-    "src/codec/common/inc/wels_common_defs.h",
+-    "src/codec/common/inc/wels_const_common.h",
+-    "src/codec/common/src/WelsTaskThread.cpp",
+-    "src/codec/common/src/WelsThread.cpp",
+-    "src/codec/common/src/WelsThreadLib.cpp",
+-    "src/codec/common/src/WelsThreadPool.cpp",
+-    "src/codec/common/src/common_tables.cpp",
+-    "src/codec/common/src/copy_mb.cpp",
+-    "src/codec/common/src/cpu.cpp",
+-    "src/codec/common/src/crt_util_safe_x.cpp",
+-    "src/codec/common/src/deblocking_common.cpp",
+-    "src/codec/common/src/expand_pic.cpp",
+-    "src/codec/common/src/intra_pred_common.cpp",
+-    "src/codec/common/src/mc.cpp",
+-    "src/codec/common/src/memory_align.cpp",
+-    "src/codec/common/src/sad_common.cpp",
+-    "src/codec/common/src/utils.cpp",
+-    "src/codec/common/src/welsCodecTrace.cpp",
+-  ]
+-
+-  include_dirs = [
+-    "src/codec/api/svc",
+-    "src/codec/common/inc",
+-    "src/codec/common/src",
++shim_headers("openh264_shim") {
++  root_path = "src"
++  headers = [
++    "wels/codec_api.h",
++    "wels/codec_app_def.h",
++    "wels/codec_def.h",
++    "wels/codec_ver.h",
+   ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
+-  configs += [ ":config" ]
+-  deps = []
+-  if (is_android) {
+-    deps += [
+-      # Defines "android_get/setCpu..." functions. The original OpenH264 build
+-      # files replaces these using macros for "wels_..." versions of the same
+-      # functions. We do not have access to these and use the <cpu-features.h>
+-      # ones instead.
+-      "//third_party/android_tools:cpu_features",
+-    ]
+-  }
+ }
+ 
+ source_set("processing") {
+-  sources = [
+-    "src/codec/processing/interface/IWelsVP.h",
+-    "src/codec/processing/src/adaptivequantization/AdaptiveQuantization.cpp",
+-    "src/codec/processing/src/adaptivequantization/AdaptiveQuantization.h",
+-    "src/codec/processing/src/backgrounddetection/BackgroundDetection.cpp",
+-    "src/codec/processing/src/backgrounddetection/BackgroundDetection.h",
+-    "src/codec/processing/src/common/WelsFrameWork.cpp",
+-    "src/codec/processing/src/common/WelsFrameWork.h",
+-    "src/codec/processing/src/common/WelsFrameWorkEx.cpp",
+-    "src/codec/processing/src/common/common.h",
+-    "src/codec/processing/src/common/memory.cpp",
+-    "src/codec/processing/src/common/memory.h",
+-    "src/codec/processing/src/common/resource.h",
+-    "src/codec/processing/src/common/typedef.h",
+-    "src/codec/processing/src/common/util.h",
+-    "src/codec/processing/src/complexityanalysis/ComplexityAnalysis.cpp",
+-    "src/codec/processing/src/complexityanalysis/ComplexityAnalysis.h",
+-    "src/codec/processing/src/denoise/denoise.cpp",
+-    "src/codec/processing/src/denoise/denoise.h",
+-    "src/codec/processing/src/denoise/denoise_filter.cpp",
+-    "src/codec/processing/src/downsample/downsample.cpp",
+-    "src/codec/processing/src/downsample/downsample.h",
+-    "src/codec/processing/src/downsample/downsamplefuncs.cpp",
+-    "src/codec/processing/src/imagerotate/imagerotate.cpp",
+-    "src/codec/processing/src/imagerotate/imagerotate.h",
+-    "src/codec/processing/src/imagerotate/imagerotatefuncs.cpp",
+-    "src/codec/processing/src/scenechangedetection/SceneChangeDetection.cpp",
+-    "src/codec/processing/src/scenechangedetection/SceneChangeDetection.h",
+-    "src/codec/processing/src/scrolldetection/ScrollDetection.cpp",
+-    "src/codec/processing/src/scrolldetection/ScrollDetection.h",
+-    "src/codec/processing/src/scrolldetection/ScrollDetectionFuncs.cpp",
+-    "src/codec/processing/src/scrolldetection/ScrollDetectionFuncs.h",
+-    "src/codec/processing/src/vaacalc/vaacalcfuncs.cpp",
+-    "src/codec/processing/src/vaacalc/vaacalculation.cpp",
+-    "src/codec/processing/src/vaacalc/vaacalculation.h",
+-  ]
+-
+-  include_dirs = [
+-    "src/codec/api/svc",
+-    "src/codec/common/inc",
+-    "src/codec/common/src",
+-    "src/codec/processing/interface",
+-    "src/codec/processing/interface/",
+-    "src/codec/processing/src/adaptivequantization",
+-    "src/codec/processing/src/backgrounddetection",
+-    "src/codec/processing/src/common",
+-    "src/codec/processing/src/complexityanalysis",
+-    "src/codec/processing/src/denoise",
+-    "src/codec/processing/src/downsample",
+-    "src/codec/processing/src/imagerotate",
+-    "src/codec/processing/src/scenechangedetection",
+-    "src/codec/processing/src/scrolldetection",
+-    "src/codec/processing/src/vaacalc",
++  deps = [
++    ":openh264_shim",
+   ]
++  public_configs = [ ":system_openh264" ]
++}
+ 
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
+-  configs += [ ":config" ]
++source_set("decoder") {
+   deps = [
+-    ":common",
++    ":openh264_shim",
+   ]
++  public_configs = [ ":system_openh264" ]
+ }
+ 
+ source_set("encoder") {
+-  sources = [
+-    "src/codec/encoder/core/inc/as264_common.h",
+-    "src/codec/encoder/core/inc/au_set.h",
+-    "src/codec/encoder/core/inc/deblocking.h",
+-    "src/codec/encoder/core/inc/decode_mb_aux.h",
+-    "src/codec/encoder/core/inc/dq_map.h",
+-    "src/codec/encoder/core/inc/encode_mb_aux.h",
+-    "src/codec/encoder/core/inc/encoder.h",
+-    "src/codec/encoder/core/inc/encoder_context.h",
+-    "src/codec/encoder/core/inc/extern.h",
+-    "src/codec/encoder/core/inc/get_intra_predictor.h",
+-    "src/codec/encoder/core/inc/mb_cache.h",
+-    "src/codec/encoder/core/inc/md.h",
+-    "src/codec/encoder/core/inc/mt_defs.h",
+-    "src/codec/encoder/core/inc/mv_pred.h",
+-    "src/codec/encoder/core/inc/nal_encap.h",
+-    "src/codec/encoder/core/inc/param_svc.h",
+-    "src/codec/encoder/core/inc/parameter_sets.h",
+-    "src/codec/encoder/core/inc/paraset_strategy.h",
+-    "src/codec/encoder/core/inc/picture.h",
+-    "src/codec/encoder/core/inc/picture_handle.h",
+-    "src/codec/encoder/core/inc/rc.h",
+-    "src/codec/encoder/core/inc/ref_list_mgr_svc.h",
+-    "src/codec/encoder/core/inc/sample.h",
+-    "src/codec/encoder/core/inc/set_mb_syn_cabac.h",
+-    "src/codec/encoder/core/inc/set_mb_syn_cavlc.h",
+-    "src/codec/encoder/core/inc/slice.h",
+-    "src/codec/encoder/core/inc/slice_multi_threading.h",
+-    "src/codec/encoder/core/inc/stat.h",
+-    "src/codec/encoder/core/inc/svc_base_layer_md.h",
+-    "src/codec/encoder/core/inc/svc_enc_frame.h",
+-    "src/codec/encoder/core/inc/svc_enc_golomb.h",
+-    "src/codec/encoder/core/inc/svc_enc_macroblock.h",
+-    "src/codec/encoder/core/inc/svc_enc_slice_segment.h",
+-    "src/codec/encoder/core/inc/svc_encode_mb.h",
+-    "src/codec/encoder/core/inc/svc_encode_slice.h",
+-    "src/codec/encoder/core/inc/svc_mode_decision.h",
+-    "src/codec/encoder/core/inc/svc_motion_estimate.h",
+-    "src/codec/encoder/core/inc/svc_set_mb_syn.h",
+-    "src/codec/encoder/core/inc/svc_set_mb_syn_cavlc.h",
+-    "src/codec/encoder/core/inc/vlc_encoder.h",
+-    "src/codec/encoder/core/inc/wels_common_basis.h",
+-    "src/codec/encoder/core/inc/wels_const.h",
+-    "src/codec/encoder/core/inc/wels_func_ptr_def.h",
+-    "src/codec/encoder/core/inc/wels_preprocess.h",
+-    "src/codec/encoder/core/inc/wels_task_base.h",
+-    "src/codec/encoder/core/inc/wels_task_encoder.h",
+-    "src/codec/encoder/core/inc/wels_task_management.h",
+-    "src/codec/encoder/core/inc/wels_transpose_matrix.h",
+-    "src/codec/encoder/core/src/au_set.cpp",
+-    "src/codec/encoder/core/src/deblocking.cpp",
+-    "src/codec/encoder/core/src/decode_mb_aux.cpp",
+-    "src/codec/encoder/core/src/encode_mb_aux.cpp",
+-    "src/codec/encoder/core/src/encoder.cpp",
+-    "src/codec/encoder/core/src/encoder_data_tables.cpp",
+-    "src/codec/encoder/core/src/encoder_ext.cpp",
+-    "src/codec/encoder/core/src/get_intra_predictor.cpp",
+-    "src/codec/encoder/core/src/md.cpp",
+-    "src/codec/encoder/core/src/mv_pred.cpp",
+-    "src/codec/encoder/core/src/nal_encap.cpp",
+-    "src/codec/encoder/core/src/paraset_strategy.cpp",
+-    "src/codec/encoder/core/src/picture_handle.cpp",
+-    "src/codec/encoder/core/src/ratectl.cpp",
+-    "src/codec/encoder/core/src/ref_list_mgr_svc.cpp",
+-    "src/codec/encoder/core/src/sample.cpp",
+-    "src/codec/encoder/core/src/set_mb_syn_cabac.cpp",
+-    "src/codec/encoder/core/src/set_mb_syn_cavlc.cpp",
+-    "src/codec/encoder/core/src/slice_multi_threading.cpp",
+-    "src/codec/encoder/core/src/svc_base_layer_md.cpp",
+-    "src/codec/encoder/core/src/svc_enc_slice_segment.cpp",
+-    "src/codec/encoder/core/src/svc_encode_mb.cpp",
+-    "src/codec/encoder/core/src/svc_encode_slice.cpp",
+-    "src/codec/encoder/core/src/svc_mode_decision.cpp",
+-    "src/codec/encoder/core/src/svc_motion_estimate.cpp",
+-    "src/codec/encoder/core/src/svc_set_mb_syn_cabac.cpp",
+-    "src/codec/encoder/core/src/svc_set_mb_syn_cavlc.cpp",
+-    "src/codec/encoder/core/src/wels_preprocess.cpp",
+-    "src/codec/encoder/core/src/wels_task_base.cpp",
+-    "src/codec/encoder/core/src/wels_task_encoder.cpp",
+-    "src/codec/encoder/core/src/wels_task_management.cpp",
+-    "src/codec/encoder/plus/inc/welsEncoderExt.h",
+-    "src/codec/encoder/plus/src/welsEncoderExt.cpp",
+-
+-    # Note: Purposefully excluded: 'src/codec/encoder/plus/src/DllEntry.cpp',
+-    # This file is not built by the OpenH264 original build files.
+-  ]
+-
+-  include_dirs = [
+-    "src/codec/api/svc",
+-    "src/codec/common/inc",
+-    "src/codec/common/src",
+-    "src/codec/encoder/core/inc",
+-    "src/codec/encoder/core/src",
+-    "src/codec/encoder/plus/inc",
+-    "src/codec/encoder/plus/src",
+-    "src/codec/processing/interface",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
+-  configs += [ ":config" ]
+   deps = [
+-    ":common",
+-    ":processing",
++    ":openh264_shim",
+   ]
++  public_configs = [ ":system_openh264" ]
+ }
+Index: webrtc/src/chromium/src/third_party/opus/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/opus/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/opus/BUILD.gn	2017-01-12 16:02:27.003560856 +0300
+@@ -1,512 +1,28 @@
+-# Copyright 2014 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("//build/config/arm.gni")
+-import("//testing/test.gni")
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
+ 
+-# If fixed point implementation shall be used (otherwise float).
+-use_opus_fixed_point = current_cpu == "arm" || current_cpu == "arm64"
+-
+-# If ARM optimizations shall be used to accelerate performance.
+-use_opus_arm_optimization = current_cpu == "arm"
+-
+-# If OPUS Run Time CPU Detections (RTCD) shall be used.
+-# Based on the conditions in celt/arm/armcpu.c:
+-# defined(_MSC_VER) || defined(__linux__).
+-use_opus_rtcd = current_cpu == "arm" && (is_win || is_android || is_linux)
+-
+-config("opus_config") {
+-  include_dirs = [ "src/include" ]
+-
+-  if (use_opus_fixed_point) {
+-    defines = [ "OPUS_FIXED_POINT" ]
+-  }
+-}
+-
+-config("opus_test_config") {
+-  include_dirs = [
+-    "src/celt",
+-    "src/silk",
+-  ]
+-
+-  if (is_win) {
+-    defines = [ "inline=__inline" ]
+-  }
+-  if (is_android) {
+-    libs = [ "log" ]
+-  }
+-  if (is_clang) {
+-    cflags = [ "-Wno-absolute-value" ]
+-  }
+-}
+-
+-if (use_opus_rtcd) {
+-  action("convert_rtcd_assembler") {
+-    script = "convert_rtcd_assembler.py"
+-    outputs = [
+-      "$target_gen_dir/celt_pitch_xcorr_arm_gnu.S",
+-    ]
+-    args = [
+-      rebase_path("//third_party/opus/src/celt/arm/arm2gnu.pl", root_build_dir),
+-      rebase_path("//third_party/opus/src/celt/arm/celt_pitch_xcorr_arm.s",
+-                  root_build_dir),
+-      rebase_path("$target_gen_dir/celt_pitch_xcorr_arm_gnu.S", root_build_dir),
+-    ]
+-  }
+-}
+-
+-static_library("opus") {
+-  sources = [
+-    "src/celt/_kiss_fft_guts.h",
+-    "src/celt/arch.h",
+-    "src/celt/bands.c",
+-    "src/celt/bands.h",
+-    "src/celt/celt.c",
+-    "src/celt/celt.h",
+-    "src/celt/celt_decoder.c",
+-    "src/celt/celt_encoder.c",
+-    "src/celt/celt_lpc.c",
+-    "src/celt/celt_lpc.h",
+-    "src/celt/cpu_support.h",
+-    "src/celt/cwrs.c",
+-    "src/celt/cwrs.h",
+-    "src/celt/ecintrin.h",
+-    "src/celt/entcode.c",
+-    "src/celt/entcode.h",
+-    "src/celt/entdec.c",
+-    "src/celt/entdec.h",
+-    "src/celt/entenc.c",
+-    "src/celt/entenc.h",
+-    "src/celt/fixed_debug.h",
+-    "src/celt/fixed_generic.h",
+-    "src/celt/float_cast.h",
+-    "src/celt/kiss_fft.c",
+-    "src/celt/kiss_fft.h",
+-    "src/celt/laplace.c",
+-    "src/celt/laplace.h",
+-    "src/celt/mathops.c",
+-    "src/celt/mathops.h",
+-    "src/celt/mdct.c",
+-    "src/celt/mdct.h",
+-    "src/celt/mfrngcod.h",
+-    "src/celt/modes.c",
+-    "src/celt/modes.h",
+-    "src/celt/os_support.h",
+-    "src/celt/pitch.c",
+-    "src/celt/pitch.h",
+-    "src/celt/quant_bands.c",
+-    "src/celt/quant_bands.h",
+-    "src/celt/rate.c",
+-    "src/celt/rate.h",
+-    "src/celt/stack_alloc.h",
+-    "src/celt/static_modes_fixed.h",
+-    "src/celt/static_modes_float.h",
+-    "src/celt/vq.c",
+-    "src/celt/vq.h",
+-    "src/include/opus.h",
+-    "src/include/opus_custom.h",
+-    "src/include/opus_defines.h",
+-    "src/include/opus_multistream.h",
+-    "src/include/opus_types.h",
+-    "src/silk/A2NLSF.c",
+-    "src/silk/API.h",
+-    "src/silk/CNG.c",
+-    "src/silk/HP_variable_cutoff.c",
+-    "src/silk/Inlines.h",
+-    "src/silk/LPC_analysis_filter.c",
+-    "src/silk/LPC_inv_pred_gain.c",
+-    "src/silk/LP_variable_cutoff.c",
+-    "src/silk/MacroCount.h",
+-    "src/silk/MacroDebug.h",
+-    "src/silk/NLSF2A.c",
+-    "src/silk/NLSF_VQ.c",
+-    "src/silk/NLSF_VQ_weights_laroia.c",
+-    "src/silk/NLSF_decode.c",
+-    "src/silk/NLSF_del_dec_quant.c",
+-    "src/silk/NLSF_encode.c",
+-    "src/silk/NLSF_stabilize.c",
+-    "src/silk/NLSF_unpack.c",
+-    "src/silk/NSQ.c",
+-    "src/silk/NSQ.h",
+-    "src/silk/NSQ_del_dec.c",
+-    "src/silk/PLC.c",
+-    "src/silk/PLC.h",
+-    "src/silk/SigProc_FIX.h",
+-    "src/silk/VAD.c",
+-    "src/silk/VQ_WMat_EC.c",
+-    "src/silk/ana_filt_bank_1.c",
+-    "src/silk/biquad_alt.c",
+-    "src/silk/bwexpander.c",
+-    "src/silk/bwexpander_32.c",
+-    "src/silk/check_control_input.c",
+-    "src/silk/code_signs.c",
+-    "src/silk/control.h",
+-    "src/silk/control_SNR.c",
+-    "src/silk/control_audio_bandwidth.c",
+-    "src/silk/control_codec.c",
+-    "src/silk/debug.c",
+-    "src/silk/debug.h",
+-    "src/silk/dec_API.c",
+-    "src/silk/decode_core.c",
+-    "src/silk/decode_frame.c",
+-    "src/silk/decode_indices.c",
+-    "src/silk/decode_parameters.c",
+-    "src/silk/decode_pitch.c",
+-    "src/silk/decode_pulses.c",
+-    "src/silk/decoder_set_fs.c",
+-    "src/silk/define.h",
+-    "src/silk/enc_API.c",
+-    "src/silk/encode_indices.c",
+-    "src/silk/encode_pulses.c",
+-    "src/silk/errors.h",
+-    "src/silk/gain_quant.c",
+-    "src/silk/init_decoder.c",
+-    "src/silk/init_encoder.c",
+-    "src/silk/inner_prod_aligned.c",
+-    "src/silk/interpolate.c",
+-    "src/silk/lin2log.c",
+-    "src/silk/log2lin.c",
+-    "src/silk/macros.h",
+-    "src/silk/main.h",
+-    "src/silk/pitch_est_defines.h",
+-    "src/silk/pitch_est_tables.c",
+-    "src/silk/process_NLSFs.c",
+-    "src/silk/quant_LTP_gains.c",
+-    "src/silk/resampler.c",
+-    "src/silk/resampler_down2.c",
+-    "src/silk/resampler_down2_3.c",
+-    "src/silk/resampler_private.h",
+-    "src/silk/resampler_private_AR2.c",
+-    "src/silk/resampler_private_IIR_FIR.c",
+-    "src/silk/resampler_private_down_FIR.c",
+-    "src/silk/resampler_private_up2_HQ.c",
+-    "src/silk/resampler_rom.c",
+-    "src/silk/resampler_rom.h",
+-    "src/silk/resampler_structs.h",
+-    "src/silk/shell_coder.c",
+-    "src/silk/sigm_Q15.c",
+-    "src/silk/sort.c",
+-    "src/silk/stereo_LR_to_MS.c",
+-    "src/silk/stereo_MS_to_LR.c",
+-    "src/silk/stereo_decode_pred.c",
+-    "src/silk/stereo_encode_pred.c",
+-    "src/silk/stereo_find_predictor.c",
+-    "src/silk/stereo_quant_pred.c",
+-    "src/silk/structs.h",
+-    "src/silk/sum_sqr_shift.c",
+-    "src/silk/table_LSF_cos.c",
+-    "src/silk/tables.h",
+-    "src/silk/tables_LTP.c",
+-    "src/silk/tables_NLSF_CB_NB_MB.c",
+-    "src/silk/tables_NLSF_CB_WB.c",
+-    "src/silk/tables_gain.c",
+-    "src/silk/tables_other.c",
+-    "src/silk/tables_pitch_lag.c",
+-    "src/silk/tables_pulses_per_block.c",
+-    "src/silk/tuning_parameters.h",
+-    "src/silk/typedef.h",
+-    "src/src/analysis.c",
+-    "src/src/analysis.h",
+-    "src/src/mlp.c",
+-    "src/src/mlp.h",
+-    "src/src/mlp_data.c",
+-    "src/src/opus.c",
+-    "src/src/opus_decoder.c",
+-    "src/src/opus_encoder.c",
+-    "src/src/opus_multistream.c",
+-    "src/src/opus_multistream_decoder.c",
+-    "src/src/opus_multistream_encoder.c",
+-    "src/src/repacketizer.c",
+-    "src/src/tansig_table.h",
+-  ]
+-
+-  defines = [
+-    "OPUS_BUILD",
+-    "OPUS_EXPORT=",
+-  ]
+-
+-  include_dirs = [
+-    "src/celt",
+-    "src/silk",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
+-  public_configs = [ ":opus_config" ]
+-  cflags = []
+-
+-  if (is_win) {
+-    defines += [
+-      "USE_ALLOCA",
+-      "inline=__inline",
+-    ]
+-
+-    cflags += [
+-      "/wd4305",  # Disable truncation warning in celt/pitch.c .
+-      "/wd4334",  # Disable 32-bit shift warning in src/opus_encoder.c .
+-    ]
+-  } else {
+-    defines += [
+-      "HAVE_LRINT",
+-      "HAVE_LRINTF",
+-      "VAR_ARRAYS",
+-    ]
+-  }
+-
+-  if (is_posix && !is_android) {
+-    # Suppress a warning given by opus_decoder.c that tells us
+-    # optimizations are turned off.
+-    cflags += [ "-Wno-#pragma-messages" ]
+-  }
+-
+-  if (!is_debug && is_posix &&
+-      (current_cpu == "arm" || current_cpu == "arm64")) {
+-    configs -= [ "//build/config/compiler:default_optimization" ]
+-
+-    # TODO(crbug.com/621335) Rework this so that we don't have the confusion
+-    # between "optimize_speed" and "optimize_max".
+-    configs += [ "//build/config/compiler:optimize_speed" ]
+-  }
+-
+-  if (use_opus_fixed_point) {
+-    sources += [
+-      "src/silk/fixed/LTP_analysis_filter_FIX.c",
+-      "src/silk/fixed/LTP_scale_ctrl_FIX.c",
+-      "src/silk/fixed/apply_sine_window_FIX.c",
+-      "src/silk/fixed/autocorr_FIX.c",
+-      "src/silk/fixed/burg_modified_FIX.c",
+-      "src/silk/fixed/corrMatrix_FIX.c",
+-      "src/silk/fixed/encode_frame_FIX.c",
+-      "src/silk/fixed/find_LPC_FIX.c",
+-      "src/silk/fixed/find_LTP_FIX.c",
+-      "src/silk/fixed/find_pitch_lags_FIX.c",
+-      "src/silk/fixed/find_pred_coefs_FIX.c",
+-      "src/silk/fixed/k2a_FIX.c",
+-      "src/silk/fixed/k2a_Q16_FIX.c",
+-      "src/silk/fixed/main_FIX.h",
+-      "src/silk/fixed/noise_shape_analysis_FIX.c",
+-      "src/silk/fixed/pitch_analysis_core_FIX.c",
+-      "src/silk/fixed/prefilter_FIX.c",
+-      "src/silk/fixed/process_gains_FIX.c",
+-      "src/silk/fixed/regularize_correlations_FIX.c",
+-      "src/silk/fixed/residual_energy16_FIX.c",
+-      "src/silk/fixed/residual_energy_FIX.c",
+-      "src/silk/fixed/schur64_FIX.c",
+-      "src/silk/fixed/schur_FIX.c",
+-      "src/silk/fixed/solve_LS_FIX.c",
+-      "src/silk/fixed/structs_FIX.h",
+-      "src/silk/fixed/vector_ops_FIX.c",
+-      "src/silk/fixed/warped_autocorrelation_FIX.c",
+-    ]
+-
+-    defines += [ "FIXED_POINT" ]
+-
+-    include_dirs += [ "src/silk/fixed" ]
+-  } else {
+-    sources += [
+-      "src/silk/float/LPC_analysis_filter_FLP.c",
+-      "src/silk/float/LPC_inv_pred_gain_FLP.c",
+-      "src/silk/float/LTP_analysis_filter_FLP.c",
+-      "src/silk/float/LTP_scale_ctrl_FLP.c",
+-      "src/silk/float/SigProc_FLP.h",
+-      "src/silk/float/apply_sine_window_FLP.c",
+-      "src/silk/float/autocorrelation_FLP.c",
+-      "src/silk/float/burg_modified_FLP.c",
+-      "src/silk/float/bwexpander_FLP.c",
+-      "src/silk/float/corrMatrix_FLP.c",
+-      "src/silk/float/encode_frame_FLP.c",
+-      "src/silk/float/energy_FLP.c",
+-      "src/silk/float/find_LPC_FLP.c",
+-      "src/silk/float/find_LTP_FLP.c",
+-      "src/silk/float/find_pitch_lags_FLP.c",
+-      "src/silk/float/find_pred_coefs_FLP.c",
+-      "src/silk/float/inner_product_FLP.c",
+-      "src/silk/float/k2a_FLP.c",
+-      "src/silk/float/levinsondurbin_FLP.c",
+-      "src/silk/float/main_FLP.h",
+-      "src/silk/float/noise_shape_analysis_FLP.c",
+-      "src/silk/float/pitch_analysis_core_FLP.c",
+-      "src/silk/float/prefilter_FLP.c",
+-      "src/silk/float/process_gains_FLP.c",
+-      "src/silk/float/regularize_correlations_FLP.c",
+-      "src/silk/float/residual_energy_FLP.c",
+-      "src/silk/float/scale_copy_vector_FLP.c",
+-      "src/silk/float/scale_vector_FLP.c",
+-      "src/silk/float/schur_FLP.c",
+-      "src/silk/float/solve_LS_FLP.c",
+-      "src/silk/float/sort_FLP.c",
+-      "src/silk/float/structs_FLP.h",
+-      "src/silk/float/warped_autocorrelation_FLP.c",
+-      "src/silk/float/wrappers_FLP.c",
+-    ]
+-
+-    include_dirs += [ "src/silk/float" ]
+-  }
+-
+-  if (use_opus_arm_optimization) {
+-    sources += [
+-      "src/celt/arm/fixed_arm64.h",
+-      "src/celt/arm/fixed_armv4.h",
+-      "src/celt/arm/fixed_armv5e.h",
+-      "src/celt/arm/kiss_fft_armv4.h",
+-      "src/celt/arm/kiss_fft_armv5e.h",
+-      "src/celt/arm/pitch_arm.h",
+-      "src/silk/arm/SigProc_FIX_armv4.h",
+-      "src/silk/arm/SigProc_FIX_armv5e.h",
+-      "src/silk/arm/macros_arm64.h",
+-      "src/silk/arm/macros_armv4.h",
+-      "src/silk/arm/macros_armv5e.h",
+-    ]
+-
+-    defines += [
+-      "OPUS_ARM_ASM",
+-      "OPUS_ARM_INLINE_ASM",
+-      "OPUS_ARM_INLINE_EDSP",
+-    ]
+-
+-    if (use_opus_rtcd) {
+-      sources += [
+-        "$target_gen_dir/celt_pitch_xcorr_arm_gnu.S",
+-        "src/celt/arm/arm_celt_map.c",
+-        "src/celt/arm/armcpu.c",
+-        "src/celt/arm/armcpu.h",
+-        "src/celt/arm/celt_neon_intr.c",
+-        "src/celt/arm/fft_arm.h",
+-        "src/celt/arm/mdct_arm.h",
+-        "src/celt/arm/pitch_arm.h",
+-        "src/silk/arm/NSQ_neon.c",
+-        "src/silk/arm/NSQ_neon.h",
+-        "src/silk/arm/arm_silk_map.c",
+-      ]
+-
+-      include_dirs += [ "src" ]
+-
+-      defines += [
+-        "OPUS_ARM_MAY_HAVE_EDSP",
+-        "OPUS_ARM_MAY_HAVE_MEDIA",
+-        "OPUS_ARM_MAY_HAVE_NEON",
+-        "OPUS_ARM_MAY_HAVE_NEON_INTR",
+-        "OPUS_HAVE_RTCD",
+-      ]
+-
+-      deps = [
+-        ":convert_rtcd_assembler",
+-      ]
+-    }
+-  }
+-}
+-
+-executable("opus_compare") {
+-  sources = [
+-    "src/src/opus_compare.c",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    ":opus_test_config",
+-  ]
+-
+-  deps = [
+-    ":opus",
+-    "//build/config/sanitizers:deps",
+-    "//build/win:default_exe_manifest",
+-  ]
+-}
+-
+-executable("opus_demo") {
+-  sources = [
+-    "src/src/opus_demo.c",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    ":opus_test_config",
+-  ]
+-
+-  deps = [
+-    ":opus",
+-    "//build/config/sanitizers:deps",
+-    "//build/win:default_exe_manifest",
+-  ]
+-}
+-
+-test("test_opus_api") {
+-  sources = [
+-    "src/tests/test_opus_api.c",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    ":opus_test_config",
+-  ]
+-
+-  deps = [
+-    ":opus",
+-  ]
++pkg_config("system_opus") {
++  packages = [ "opus" ]
+ }
+ 
+-test("test_opus_encode") {
+-  sources = [
+-    "src/tests/test_opus_encode.c",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    ":opus_test_config",
+-  ]
+-
+-  deps = [
+-    ":opus",
++shim_headers("opus_shim") {
++  root_path = "src/include"
++  headers = [
++    "opus_custom.h",
++    "opus_defines.h",
++    "opus_multistream.h",
++    "opus_types.h",
++    "opus.h",
+   ]
+ }
+ 
+-# GN orders flags on a target before flags from configs. The default config
+-# adds -Wall, and this flag have to be after -Wall -- so they need to
+-# come from a config and can't be on the target directly.
+-config("test_opus_decode_config") {
+-  # test_opus_decode passes a null pointer to opus_decode() for an argument
+-  # marked as requiring a non-null value by the nonnull function attribute,
+-  # and expects opus_decode() to fail. Disable the -Wnonnull option to avoid
+-  # a compilation error if -Werror is specified.
+-  if (is_posix) {
+-    cflags = [ "-Wno-nonnull" ]
+-  }
+-}
+-
+-test("test_opus_decode") {
+-  sources = [
+-    "src/tests/test_opus_decode.c",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    ":opus_test_config",
+-    ":test_opus_decode_config",
+-  ]
+-
+-  deps = [
+-    ":opus",
+-  ]
+-}
+-
+-test("test_opus_padding") {
+-  sources = [
+-    "src/tests/test_opus_padding.c",
+-  ]
+-
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [
+-    "//build/config/compiler:no_chromium_code",
+-    ":opus_test_config",
+-  ]
+-
++source_set("opus") {
+   deps = [
+-    ":opus",
++    ":opus_shim",
+   ]
++  public_configs = [ ":system_opus" ]
+ }
+Index: webrtc/src/chromium/src/third_party/libsrtp/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/libsrtp/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/libsrtp/BUILD.gn	2017-01-12 16:02:27.003560856 +0300
+@@ -1,228 +1,58 @@
+-# Copyright 2014 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("//testing/test.gni")
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
+ 
+-declare_args() {
+-  # Tests may not be appropriate for some build environments, e.g. Windows.
+-  # Rather than enumerate valid options, we just let clients ask for them.
+-  build_libsrtp_tests = false
++pkg_config("system_libsrtp") {
++  packages = [ "libsrtp" ]
+ }
+ 
+-config("libsrtp_config") {
+-  defines = [
+-    # Package identity
+-    "PACKAGE_STRING=\"libsrtp2 2.0.0-pre\"",
+-    "PACKAGE_VERSION=\"2.0.0-pre\"",
+-
+-    # Config
+-    "HAVE_CONFIG_H",
+-    "OPENSSL",
+-
+-    # Platform properties
+-    "HAVE_STDLIB_H",
+-    "HAVE_STRING_H",
+-    "HAVE_STDINT_H",
+-    "HAVE_INTTYPES_H",
+-    "HAVE_INT16_T",
+-    "HAVE_INT32_T",
+-    "HAVE_INT8_T",
+-    "HAVE_UINT16_T",
+-    "HAVE_UINT32_T",
+-    "HAVE_UINT64_T",
+-    "HAVE_UINT8_T",
+-  ]
+-  if (is_posix) {
+-    defines += [
+-      "HAVE_ARPA_INET_H",
+-      "HAVE_NETINET_IN_H",
+-      "HAVE_SYS_TYPES_H",
+-      "HAVE_UNISTD_H",
+-    ]
+-  }
+-  if (is_win) {
+-    defines += [ "HAVE_WINSOCK2_H" ]
+-  }
+-
+-  # Supports clients depending on SRTP_RELATIVE_PATH.
+-  # TODO(mattdr): Remove SRTP_RELATIVE_PATH and this config.
+-  include_dirs = [
+-    ".",
+-    "config",
+-    "include",
+-    "crypto/include",
++shim_headers("libsrtp_shim") {
++  root_path = "srtp/include"
++  headers = [
++    "srtp/ekt.h",
++    "srtp/getopt_s.h",
++    "srtp/rtp.h",
++    "srtp/rtp_priv.h",
++    "srtp/srtp.h",
++    "srtp/srtp_priv.h",
++    "srtp/ut_sim.h",
++    "srtp/aes_cbc.h",
++    "srtp/aes.h",
++    "srtp/aes_icm.h",
++    "srtp/alloc.h",
++    "srtp/auth.h",
++    "srtp/cipher.h",
++    "srtp/cryptoalg.h",
++    "srtp/crypto.h",
++    "srtp/crypto_kernel.h",
++    "srtp/crypto_math.h",
++    "srtp/crypto_types.h",
++    "srtp/datatypes.h",
++    "srtp/err.h",
++    "srtp/gf2_8.h",
++    "srtp/hmac.h",
++    "srtp/integers.h",
++    "srtp/kernel_compat.h",
++    "srtp/key.h",
++    "srtp/null_auth.h",
++    "srtp/null_cipher.h",
++    "srtp/prng.h",
++    "srtp/rand_source.h",
++    "srtp/rdb.h",
++    "srtp/rdbx.h",
++    "srtp/sha1.h",
++    "srtp/stat.h",
++    "srtp/xfm.h",
+   ]
+ }
+ 
+-config("libsrtp_warnings") {
+-  cflags = []
+-  if (is_win) {
+-    cflags += [ "/wd4018" ]  # Signed/unsigned mismatch in comparison
+-  }
+-}
+-
+-static_library("libsrtp") {
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
+-  configs += [ ":libsrtp_warnings" ]
+-  public_configs = [ ":libsrtp_config" ]
+-  sources = [
+-    # includes
+-    "include/ekt.h",
+-    "include/rtp.h",
+-    "include/srtp.h",
+-
+-    # headers
+-    "crypto/include/aes.h",
+-    "crypto/include/aes_gcm_ossl.h",
+-    "crypto/include/aes_icm.h",
+-    "crypto/include/aes_icm_ossl.h",
+-    "crypto/include/alloc.h",
+-    "crypto/include/auth.h",
+-    "crypto/include/cipher.h",
+-    "crypto/include/crypto_kernel.h",
+-    "crypto/include/crypto_types.h",
+-    "crypto/include/datatypes.h",
+-    "crypto/include/err.h",
+-    "crypto/include/integers.h",
+-    "crypto/include/key.h",
+-    "crypto/include/null_auth.h",
+-    "crypto/include/null_cipher.h",
+-    "crypto/include/rdb.h",
+-    "crypto/include/rdbx.h",
+-    "crypto/include/stat.h",
+-    "include/rtp_priv.h",
+-    "include/srtp_priv.h",
+-    "include/ut_sim.h",
+-
+-    # sources
+-    "crypto/cipher/aes_gcm_ossl.c",
+-    "crypto/cipher/aes_icm_ossl.c",
+-    "crypto/cipher/cipher.c",
+-    "crypto/cipher/null_cipher.c",
+-    "crypto/hash/auth.c",
+-    "crypto/hash/hmac_ossl.c",
+-    "crypto/hash/null_auth.c",
+-    "crypto/kernel/alloc.c",
+-    "crypto/kernel/crypto_kernel.c",
+-    "crypto/kernel/err.c",
+-    "crypto/kernel/key.c",
+-    "crypto/math/datatypes.c",
+-    "crypto/math/stat.c",
+-    "crypto/replay/rdb.c",
+-    "crypto/replay/rdbx.c",
+-    "srtp/ekt.c",
+-    "srtp/srtp.c",
+-  ]
+-  public_deps = [
+-    "//third_party/boringssl:boringssl",
++source_set("libsrtp") {
++  deps = [
++    "//third_party/openssl",
++    ":libsrtp_shim",
+   ]
+-}
+-
+-if (build_libsrtp_tests) {
+-  config("srtp_test_config") {
+-    include_dirs = [ "test" ]
+-    configs = [ ":libsrtp_warnings" ]
+-  }
+-
+-  template("srtp_test") {
+-    test("${target_name}") {
+-      output_name = invoker.target_name
+-      output_dir = "${root_out_dir}/srtp_tests"
+-      configs -= [ "//build/config/compiler:chromium_code" ]
+-      configs += [ "//build/config/compiler:no_chromium_code" ]
+-      configs += [ ":srtp_test_config" ]
+-      deps = [
+-        ":libsrtp",
+-      ]
+-      sources = [
+-        "crypto/replay/ut_sim.c",
+-        "include/getopt_s.h",
+-        "include/ut_sim.h",
+-        "test/getopt_s.c",
+-        "test/util.c",
+-        "test/util.h",
+-        invoker.source,
+-      ]
+-      testonly = true
+-    }
+-  }
+-
+-  srtp_test("dtls_srtp_driver") {
+-    source = "test/dtls_srtp_driver.c"
+-  }
+-  srtp_test("rdbx_driver") {
+-    source = "test/rdbx_driver.c"
+-  }
+-  srtp_test("replay_driver") {
+-    source = "test/replay_driver.c"
+-  }
+-  srtp_test("roc_driver") {
+-    source = "test/roc_driver.c"
+-  }
+-  srtp_test("srtp_driver") {
+-    source = "test/srtp_driver.c"
+-  }
+-  srtp_test("cipher_driver") {
+-    source = "crypto/test/cipher_driver.c"
+-  }
+-  srtp_test("datatypes_driver") {
+-    source = "crypto/test/datatypes_driver.c"
+-  }
+-  srtp_test("kernel_driver") {
+-    source = "crypto/test/kernel_driver.c"
+-  }
+-
+-  executable("rtpw") {
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":srtp_test_config" ]
+-    output_dir = "${root_out_dir}/srtp_tests"
+-    deps = [
+-      ":libsrtp",
+-    ]
+-    sources = [
+-      "include/getopt_s.h",
+-      "test/getopt_s.c",
+-      "test/rtp.c",
+-      "test/rtpw.c",
+-      "test/util.c",
+-      "test/util.h",
+-
+-      # The original Makefile includes this file, but all the functions rtpw
+-      # uses have been moved to util.c.
+-      "crypto/math/datatypes.c",
+-    ]
+-    defines = [ "HAVE_SYS_SOCKET_H" ]
+-    testonly = true
+-  }
+-
+-  copy("test_scripts") {
+-    sources = [
+-      "run_all_tests.sh",
+-      "test/rtpw_test.sh",
+-      "test/rtpw_test_gcm.sh",
+-    ]
+-    outputs = [
+-      "${root_out_dir}/srtp_tests/{{source_file_part}}",
+-    ]
+-    testonly = true
+-  }
+-
+-  group("srtp_tests") {
+-    deps = [
+-      ":cipher_driver",
+-      ":datatypes_driver",
+-      ":dtls_srtp_driver",
+-      ":kernel_driver",
+-      ":rdbx_driver",
+-      ":replay_driver",
+-      ":roc_driver",
+-      ":rtpw",
+-      ":srtp_driver",
+-      ":test_scripts",
+-    ]
+-    testonly = true
+-  }
++  public_configs = [ ":system_libsrtp" ]
+ }
+Index: webrtc/src/chromium/src/third_party/libvpx/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/libvpx/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/chromium/src/third_party/libvpx/BUILD.gn	2017-01-12 16:02:27.003560856 +0300
+@@ -1,336 +1,34 @@
+-# Copyright 2014 The Chromium Authors. All rights reserved.
++# Copyright 2016 The Chromium Authors. All rights reserved.
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("//build/config/arm.gni")
+-import("//build/config/android/config.gni")
+-import("//build/config/sanitizers/sanitizers.gni")
+-import("//third_party/libvpx/libvpx_srcs.gni")
+-import("//third_party/yasm/yasm_assemble.gni")
++import("//build/config/linux/pkg_config.gni")
++import("//build/shim_headers.gni")
+ 
+-# Sets the architecture name for building libvpx.
+-if (current_cpu == "x86") {
+-  cpu_arch_full = "ia32"
+-} else if (current_cpu == "x64") {
+-  if (is_msan) {
+-    cpu_arch_full = "generic"
+-  } else {
+-    cpu_arch_full = "x64"
+-  }
+-} else if (current_cpu == "arm") {
+-  if (arm_use_neon) {
+-    cpu_arch_full = "arm-neon"
+-  } else if (is_android) {
+-    cpu_arch_full = "arm-neon-cpu-detect"
+-  } else {
+-    cpu_arch_full = "arm"
+-  }
+-} else {
+-  cpu_arch_full = current_cpu
++pkg_config("system_libvpx") {
++  packages = [ "vpx" ]
+ }
+ 
+-if (is_nacl) {
+-  platform_include_dir = "//third_party/libvpx/source/config/nacl"
+-} else {
+-  # The mac configurations are currently a relic. They were useful when
+-  # x86inc.asm did not work for MACH_O but now the build is identical to the
+-  # linux config. iOS for arm on the other hand needs an apple-specific twist in
+-  # vpx_config.asm
+-  if (is_ios && current_cpu == "arm") {
+-    os_category = current_os
+-  } else if (is_posix) { # Should cover linux, mac, and the ios simulator.
+-    os_category = "linux"
+-  } else { # This should only match windows.
+-    os_category = current_os
+-  }
+-  platform_include_dir =
+-      "//third_party/libvpx/source/config/$os_category/$cpu_arch_full"
+-}
+-
+-config("libvpx_config") {
+-  include_dirs = [
+-    "//third_party/libvpx/source/config",
+-    platform_include_dir,
+-    "//third_party/libvpx/source/libvpx",
+-    "$root_gen_dir/third_party/libvpx",  # Provides vpx_rtcd.h.
++shim_headers("libvpx_shim") {
++  root_path = "source/libvpx"
++  headers = [
++    "vpx/vp8.h",
++    "vpx/vp8cx.h",
++    "vpx/vp8dx.h",
++    "vpx/vpx_codec.h",
++    "vpx/vpx_codec_impl_bottom.h",
++    "vpx/vpx_codec_impl_top.h",
++    "vpx/vpx_decoder.h",
++    "vpx/vpx_encoder.h",
++    "vpx/vpx_frame_buffer.h",
++    "vpx/vpx_image.h",
++    "vpx/vpx_integer.h",
+   ]
+ }
+ 
+-# gn orders flags on a target before flags from configs. The default config
+-# adds -Wall, and these flags have to be after -Wall -- so they need to come
+-# from a config and can't be on the target directly.
+-config("libvpx_warnings") {
+-  if (is_clang) {
+-    cflags = [
+-      # libvpx heavily relies on implicit enum casting.
+-      "-Wno-conversion",
+-
+-      # libvpx does `if ((a == b))` in some places.
+-      "-Wno-parentheses-equality",
+-
+-      # libvpx has many static functions in header, which trigger this warning.
+-      "-Wno-unused-function",
+-    ]
+-  } else if (!is_win) {
+-    cflags = [
+-      "-Wno-unused-function",
+-      "-Wno-sign-compare",
+-    ]
+-  }
+-}
+-
+-# This config is applied to targets that depend on libvpx.
+-config("libvpx_external_config") {
+-  include_dirs = [ "//third_party/libvpx/source/libvpx" ]
+-}
+-
+-if (current_cpu == "x86" || (current_cpu == "x64" && !is_msan)) {
+-  yasm_assemble("libvpx_yasm") {
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_assembly
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_assembly
+-    }
+-
+-    defines = [ "CHROMIUM" ]
+-    if (is_android) {
+-      # On Android, define __ANDROID__ to use alternative standard library
+-      # functions.
+-      defines += [ "__ANDROID__" ]
+-    }
+-    include_dirs = [
+-      platform_include_dir,
+-      "//third_party/libvpx/source/config",
+-      "//third_party/libvpx/source/libvpx",
+-      target_gen_dir,
+-    ]
+-  }
+-}
+-
+-if (current_cpu == "x86" || (current_cpu == "x64" && !is_msan)) {
+-  # The following targets are deliberately source_set rather than
+-  # static_library. The :libvpx target exposes these intrinsic implementations
+-  # via global function pointer symbols, which hides the object dependency at
+-  # link time. On Mac, this results in undefined references to the intrinsic
+-  # symbols.
+-
+-  source_set("libvpx_intrinsics_mmx") {
+-    configs += [ ":libvpx_config" ]
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (!is_win) {
+-      cflags = [ "-mmmx" ]
+-    }
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_mmx
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_mmx
+-    }
+-  }
+-
+-  source_set("libvpx_intrinsics_sse2") {
+-    configs += [ ":libvpx_config" ]
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (!is_win || is_clang) {
+-      cflags = [ "-msse2" ]
+-    }
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_sse2
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_sse2
+-    }
+-  }
+-
+-  source_set("libvpx_intrinsics_ssse3") {
+-    configs += [ ":libvpx_config" ]
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (!is_win || is_clang) {
+-      cflags = [ "-mssse3" ]
+-    }
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_ssse3
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_ssse3
+-    }
+-  }
+-
+-  source_set("libvpx_intrinsics_sse4_1") {
+-    configs += [ ":libvpx_config" ]
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (!is_win || is_clang) {
+-      cflags = [ "-msse4.1" ]
+-    }
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_sse4_1
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_sse4_1
+-    }
+-  }
+-
+-  source_set("libvpx_intrinsics_avx") {
+-    configs += [ ":libvpx_config" ]
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (is_win) {
+-      cflags = [ "/arch:AVX" ]
+-    } else {
+-      cflags = [ "-mavx" ]
+-    }
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_avx
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_avx
+-    }
+-  }
+-
+-  source_set("libvpx_intrinsics_avx2") {
+-    configs += [ ":libvpx_config" ]
+-    configs -= [ "//build/config/compiler:chromium_code" ]
+-    configs += [ "//build/config/compiler:no_chromium_code" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (is_win) {
+-      cflags = [ "/arch:AVX2" ]
+-    } else {
+-      cflags = [ "-mavx2" ]
+-    }
+-    if (current_cpu == "x86") {
+-      sources = libvpx_srcs_x86_avx2
+-    } else if (current_cpu == "x64") {
+-      sources = libvpx_srcs_x86_64_avx2
+-    }
+-  }
+-}
+-
+-if (cpu_arch_full == "arm-neon-cpu-detect") {
+-  static_library("libvpx_intrinsics_neon") {
+-    configs -= [ "//build/config/compiler:compiler_arm_fpu" ]
+-    configs += [ ":libvpx_config" ]
+-    configs += [ ":libvpx_warnings" ]
+-    cflags = [ "-mfpu=neon" ]
+-    sources = libvpx_srcs_arm_neon_cpu_detect_neon
+-  }
+-}
+-
+-if (current_cpu == "arm") {
+-  if (cpu_arch_full == "arm-neon") {
+-    arm_assembly_sources = libvpx_srcs_arm_neon_assembly
+-  } else if (cpu_arch_full == "arm-neon-cpu-detect") {
+-    arm_assembly_sources = libvpx_srcs_arm_neon_cpu_detect_assembly
+-  } else {
+-    arm_assembly_sources = libvpx_srcs_arm_assembly
+-  }
+-}
+-
+-# Converts ARM assembly files to GAS style.
+-if (current_cpu == "arm" && arm_assembly_sources != []) {
+-  action_foreach("convert_arm_assembly") {
+-    script = "//third_party/libvpx/run_perl.py"
+-    sources = arm_assembly_sources
+-    gen_file =
+-        get_label_info("//third_party/libvpx/source/libvpx", "root_gen_dir") +
+-        "/{{source_root_relative_dir}}/{{source_file_part}}.S"
+-    outputs = [
+-      gen_file,
+-    ]
+-    if (is_ios) {
+-      ads2gas_script =
+-          "//third_party/libvpx/source/libvpx/build/make/ads2gas_apple.pl"
+-    } else {
+-      ads2gas_script =
+-          "//third_party/libvpx/source/libvpx/build/make/ads2gas.pl"
+-    }
+-    args = [
+-      "-s",
+-      rebase_path(ads2gas_script, root_build_dir),
+-      "-i",
+-      "{{source}}",
+-      "-o",
+-      rebase_path(gen_file),
+-    ]
+-  }
+-
+-  static_library("libvpx_assembly_arm") {
+-    sources = get_target_outputs(":convert_arm_assembly")
+-    configs -= [ "//build/config/compiler:compiler_arm_fpu" ]
+-    configs += [ ":libvpx_config" ]
+-    configs += [ ":libvpx_warnings" ]
+-    if (cpu_arch_full == "arm-neon" || cpu_arch_full == "arm-neon-cpu-detect") {
+-      asmflags = [ "-mfpu=neon" ]
+-
+-      # allow asm files to include generated sources which match the source
+-      # tree layout, e.g., vpx_dsp/arm/...
+-      include_dirs = [ get_label_info("//third_party/libvpx/source/libvpx",
+-                                      "target_gen_dir") ]
+-    }
+-    deps = [
+-      ":convert_arm_assembly",
+-    ]
+-  }
+-}
+-
+-static_library("libvpx") {
+-  if (!is_debug && is_win) {
+-    configs -= [ "//build/config/compiler:default_optimization" ]
+-    configs += [ "//build/config/compiler:optimize_max" ]
+-  }
+-
+-  if (is_nacl) {
+-    sources = libvpx_srcs_generic
+-  } else if (current_cpu == "x86") {
+-    sources = libvpx_srcs_x86
+-  } else if (current_cpu == "x64") {
+-    if (is_msan) {
+-      sources = libvpx_srcs_generic
+-    } else {
+-      sources = libvpx_srcs_x86_64
+-    }
+-  } else if (current_cpu == "mipsel" || current_cpu == "mips64el") {
+-    sources = libvpx_srcs_mips
+-  } else if (current_cpu == "arm") {
+-    if (arm_use_neon) {
+-      sources = libvpx_srcs_arm_neon
+-    } else if (is_android) {
+-      sources = libvpx_srcs_arm_neon_cpu_detect
+-    } else {
+-      sources = libvpx_srcs_arm
+-    }
+-  } else if (current_cpu == "arm64") {
+-    sources = libvpx_srcs_arm64
+-  }
+-
+-  configs += [ ":libvpx_config" ]
+-  configs -= [ "//build/config/compiler:chromium_code" ]
+-  configs += [ "//build/config/compiler:no_chromium_code" ]
+-  configs += [ ":libvpx_warnings" ]
+-  deps = []
+-  if (current_cpu == "x86" || (current_cpu == "x64" && !is_msan)) {
+-    deps += [
+-      ":libvpx_intrinsics_avx",
+-      ":libvpx_intrinsics_avx2",
+-      ":libvpx_intrinsics_mmx",
+-      ":libvpx_intrinsics_sse2",
+-      ":libvpx_intrinsics_sse4_1",
+-      ":libvpx_intrinsics_ssse3",
+-      ":libvpx_yasm",
+-    ]
+-  }
+-  if (cpu_arch_full == "arm-neon-cpu-detect") {
+-    deps += [ ":libvpx_intrinsics_neon" ]
+-  }
+-  if (is_android) {
+-    deps += [ "//third_party/android_tools:cpu_features" ]
+-  }
+-  if (current_cpu == "arm" && arm_assembly_sources != []) {
+-    deps += [ ":libvpx_assembly_arm" ]
+-  }
+-
+-  public_configs = [ ":libvpx_external_config" ]
++source_set("libvpx") {
++  deps = [
++    ":libvpx_shim",
++  ]
++  public_configs = [ ":system_libvpx" ]
+ }
+Index: webrtc/src/webrtc/examples/BUILD.gn
+===================================================================
+--- webrtc.orig/src/webrtc/examples/BUILD.gn	2017-01-12 16:02:27.005560846 +0300
++++ webrtc/src/webrtc/examples/BUILD.gn	2017-01-12 16:02:27.003560856 +0300
+@@ -606,6 +606,7 @@ if (!build_with_chromium) {
+       "../p2p:libstunprober",
+       "../p2p:rtc_p2p",
+       "../system_wrappers:field_trial_default",
++      "//third_party/openssl",
+     ]
+   }
+ }

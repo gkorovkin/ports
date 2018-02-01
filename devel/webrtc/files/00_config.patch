@@ -1,0 +1,132 @@
+
+
+* Enable exceptions, RTTI, debug info in release and C++11.
+* Add target arch and optimization flags.
+* Enable thread-safe initialization of function-local static variables.
+
+Index: webrtc/src/chromium/src/build/config/BUILDCONFIG.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/build/config/BUILDCONFIG.gn	2017-01-12 16:02:17.447605629 +0300
++++ webrtc/src/chromium/src/build/config/BUILDCONFIG.gn	2017-01-12 16:02:17.445605638 +0300
+@@ -476,7 +476,6 @@ default_compiler_configs = [
+   "//build/config/compiler:default_optimization",
+   "//build/config/compiler:default_stack_frames",
+   "//build/config/compiler:default_symbols",
+-  "//build/config/compiler:no_rtti",
+   "//build/config/compiler:runtime_library",
+   "//build/config/sanitizers:default_sanitizer_flags",
+ ]
+@@ -496,7 +495,6 @@ if (current_os == "winrt_81" || current_
+ }
+ if (is_posix) {
+   default_compiler_configs += [
+-    "//build/config/gcc:no_exceptions",
+     "//build/config/gcc:symbol_visibility_hidden",
+   ]
+ }
+Index: webrtc/src/chromium/src/build/config/compiler/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/build/config/compiler/BUILD.gn	2017-01-12 16:02:17.447605629 +0300
++++ webrtc/src/chromium/src/build/config/compiler/BUILD.gn	2017-01-12 16:02:17.445605638 +0300
+@@ -176,10 +176,6 @@ config("compiler") {
+     # --------------------------------
+     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
+     cflags_cc += [
+-      # If this is removed then remove the corresponding /Zc:threadSafeInit- for
+-      # Windows.
+-      "-fno-threadsafe-statics",
+-
+       # Not exporting C++ inline functions can generally be applied anywhere
+       # so we do so here. Normal function visibility is controlled by
+       # //build/config/gcc:symbol_visibility_hidden.
+@@ -262,6 +258,12 @@ config("compiler") {
+       ]
+     }
+ 
++    defines += [
++      "__STDC_CONSTANT_MACROS",
++      "__STDC_FORMAT_MACROS",
++      "__STDC_LIMIT_MACROS",
++    ]
++
+     if (!is_nacl) {
+       if (exclude_unwind_tables) {
+         cflags += [
+@@ -511,11 +513,16 @@ config("compiler_cpu_abi") {
+     if (current_cpu == "x64") {
+       cflags += [
+         "-m64",
+-        "-march=x86-64",
++        "-march=corei7",
++        "-mtune=corei7-avx",
+       ]
+       ldflags += [ "-m64" ]
+     } else if (current_cpu == "x86") {
+-      cflags += [ "-m32" ]
++      cflags += [
++        "-m32",
++        "-march=corei7",
++        "-mtune=corei7-avx",
++      ]
+       ldflags += [ "-m32" ]
+       if (!is_nacl) {
+         cflags += [
+@@ -1291,6 +1298,24 @@ if (is_win) {
+       # can be removed at link time with --gc-sections.
+       "-fdata-sections",
+       "-ffunction-sections",
++
++      "-O3",
++      "-ftree-vectorize",
++      "-fgcse-sm",
++      "-fgcse-las",
++      "-fgcse-after-reload",
++      "-floop-interchange",
++      "-ftree-loop-im",
++      "-ftree-loop-distribution",
++      "-ftree-loop-if-convert",
++      "-funswitch-loops",
++      "-frename-registers",
++      "-fivopts",
++
++      "-fno-math-errno",
++      "-fno-rounding-math",
++      "-fno-signaling-nans",
++      "-fno-trapping-math",
+     ]
+ 
+     common_optimize_on_ldflags += [
+@@ -1298,6 +1323,9 @@ if (is_win) {
+       # See http://lwn.net/Articles/192624/ .
+       "-Wl,-O1",
+       "-Wl,--gc-sections",
++
++      "-g",
++      "-Wl,--hash-style=both",
+     ]
+   }
+ }
+@@ -1548,7 +1576,10 @@ config("symbols") {
+         "-g2",
+       ]
+     } else {
+-      cflags = [ "-g2" ]
++      cflags = [
++        "-g2",
++        "-gdwarf-4",
++      ]
+     }
+     if (use_debug_fission) {
+       cflags += [ "-gsplit-dwarf" ]
+@@ -1574,7 +1605,10 @@ config("minimal_symbols") {
+         "-g1",
+       ]
+     } else {
+-      cflags = [ "-g1" ]
++      cflags = [
++        "-g1",
++        "-gdwarf-4",
++      ]
+     }
+     if (use_debug_fission) {
+       cflags += [ "-gsplit-dwarf" ]

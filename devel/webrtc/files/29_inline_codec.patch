@@ -1,0 +1,57 @@
+Index: webrtc/src/webrtc/media/base/codec.cc
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/codec.cc	2017-01-12 16:04:00.391130048 +0300
++++ webrtc/src/webrtc/media/base/codec.cc	2017-01-12 16:04:00.389130058 +0300
+@@ -345,14 +345,6 @@ bool HasTransportCc(const Codec& codec)
+       FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
+ }
+ 
+-bool CodecNamesEq(const std::string& name1, const std::string& name2) {
+-  return CodecNamesEq(name1.c_str(), name2.c_str());
+-}
+-
+-bool CodecNamesEq(const char* name1, const char* name2) {
+-  return _stricmp(name1, name2) == 0;
+-}
+-
+ webrtc::VideoCodecType CodecTypeFromName(const std::string& name) {
+   if (CodecNamesEq(name.c_str(), kVp8CodecName)) {
+     return webrtc::kVideoCodecVP8;
+Index: webrtc/src/webrtc/media/base/codec.h
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/codec.h	2017-01-12 16:04:00.391130048 +0300
++++ webrtc/src/webrtc/media/base/codec.h	2017-01-12 16:04:00.390130053 +0300
+@@ -19,6 +19,7 @@
+ 
+ #include "webrtc/api/rtpparameters.h"
+ #include "webrtc/common_types.h"
++#include "webrtc/base/stringutils.h"
+ #include "webrtc/media/base/mediaconstants.h"
+ 
+ namespace cricket {
+@@ -222,7 +223,7 @@ struct DataCodec : public Codec {
+ // Get the codec setting associated with |payload_type|. If there
+ // is no codec associated with that payload type it returns nullptr.
+ template <class Codec>
+-const Codec* FindCodecById(const std::vector<Codec>& codecs, int payload_type) {
++inline const Codec* FindCodecById(const std::vector<Codec>& codecs, int payload_type) {
+   for (const auto& codec : codecs) {
+     if (codec.id == payload_type)
+       return &codec;
+@@ -230,8 +231,14 @@ const Codec* FindCodecById(const std::ve
+   return nullptr;
+ }
+ 
+-bool CodecNamesEq(const std::string& name1, const std::string& name2);
+-bool CodecNamesEq(const char* name1, const char* name2);
++inline bool CodecNamesEq(const char* name1, const char* name2) {
++  return _stricmp(name1, name2) == 0;
++}
++
++inline bool CodecNamesEq(const std::string& name1, const std::string& name2) {
++  return CodecNamesEq(name1.c_str(), name2.c_str());
++}
++
+ webrtc::VideoCodecType CodecTypeFromName(const std::string& name);
+ bool HasNack(const Codec& codec);
+ bool HasRemb(const Codec& codec);

@@ -1,0 +1,50 @@
+Index: webrtc/src/webrtc/base/onetimeevent.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/onetimeevent.h	2017-01-12 16:03:35.368244342 +0300
++++ webrtc/src/webrtc/base/onetimeevent.h	2017-01-12 16:03:35.366244351 +0300
+@@ -11,7 +11,7 @@
+ #ifndef WEBRTC_BASE_ONETIMEEVENT_H_
+ #define WEBRTC_BASE_ONETIMEEVENT_H_
+ 
+-#include "webrtc/base/criticalsection.h"
++#include <atomic>
+ #include "webrtc/typedefs.h"
+ 
+ namespace webrtc {
+@@ -25,19 +25,17 @@ namespace webrtc {
+ //   }
+ class OneTimeEvent {
+  public:
+-  OneTimeEvent() {}
++  OneTimeEvent() noexcept : happened_(false) {}
+   bool operator()() {
+-    rtc::CritScope cs(&critsect_);
+-    if (happened_) {
+-      return false;
+-    }
+-    happened_ = true;
+-    return true;
++    bool expected = false;
++    return happened_.compare_exchange_strong(expected, true, std::memory_order_acquire, std::memory_order_relaxed);
++  }
++  void set() {
++    happened_.store(true, std::memory_order_relaxed);
+   }
+ 
+  private:
+-  bool happened_ = false;
+-  rtc::CriticalSection critsect_;
++  std::atomic<bool> happened_;
+ };
+ 
+ // A non-thread-safe, ligher-weight version of the OneTimeEvent class.
+@@ -51,6 +49,9 @@ class ThreadUnsafeOneTimeEvent {
+     happened_ = true;
+     return true;
+   }
++  void set() {
++    happened_ = true;
++  }
+ 
+  private:
+   bool happened_ = false;

@@ -1,0 +1,143 @@
+Index: webrtc/src/webrtc/base/copyonwritebuffer.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/copyonwritebuffer.cc	2017-01-12 16:03:58.024140826 +0300
++++ webrtc/src/webrtc/base/copyonwritebuffer.cc	2017-01-12 16:03:58.022140835 +0300
+@@ -13,13 +13,13 @@
+ namespace rtc {
+ 
+ CopyOnWriteBuffer::CopyOnWriteBuffer(size_t size)
+-    : buffer_(size > 0 ? new RefCountedObject<Buffer>(size) : nullptr) {
++    : buffer_(size > 0 ? new RefCountedObjectFinal<Buffer>(size) : nullptr) {
+   RTC_DCHECK(IsConsistent());
+ }
+ 
+ CopyOnWriteBuffer::CopyOnWriteBuffer(size_t size, size_t capacity)
+     : buffer_(size > 0 || capacity > 0
+-          ? new RefCountedObject<Buffer>(size, capacity)
++          ? new RefCountedObjectFinal<Buffer>(size, capacity)
+           : nullptr) {
+   RTC_DCHECK(IsConsistent());
+ }
+@@ -37,7 +37,7 @@ void CopyOnWriteBuffer::SetSize(size_t s
+   RTC_DCHECK(IsConsistent());
+   if (!buffer_) {
+     if (size > 0) {
+-      buffer_ = new RefCountedObject<Buffer>(size);
++      buffer_ = new RefCountedObjectFinal<Buffer>(size);
+     }
+     RTC_DCHECK(IsConsistent());
+     return;
+@@ -45,7 +45,7 @@ void CopyOnWriteBuffer::SetSize(size_t s
+ 
+   // Clone data if referenced.
+   if (!buffer_->HasOneRef()) {
+-    buffer_ = new RefCountedObject<Buffer>(
++    buffer_ = new RefCountedObjectFinal<Buffer>(
+         buffer_->data(),
+         std::min(buffer_->size(), size),
+         std::max(buffer_->capacity(), size));
+@@ -58,7 +58,7 @@ void CopyOnWriteBuffer::EnsureCapacity(s
+   RTC_DCHECK(IsConsistent());
+   if (!buffer_) {
+     if (capacity > 0) {
+-      buffer_ = new RefCountedObject<Buffer>(0, capacity);
++      buffer_ = new RefCountedObjectFinal<Buffer>(0, capacity);
+     }
+     RTC_DCHECK(IsConsistent());
+     return;
+@@ -78,7 +78,7 @@ void CopyOnWriteBuffer::Clear() {
+   if (buffer_->HasOneRef()) {
+     buffer_->Clear();
+   } else {
+-    buffer_ = new RefCountedObject<Buffer>(0, buffer_->capacity());
++    buffer_ = new RefCountedObjectFinal<Buffer>(0, buffer_->capacity());
+   }
+   RTC_DCHECK(IsConsistent());
+ }
+@@ -88,7 +88,7 @@ void CopyOnWriteBuffer::CloneDataIfRefer
+     return;
+   }
+ 
+-  buffer_ = new RefCountedObject<Buffer>(buffer_->data(), buffer_->size(),
++  buffer_ = new RefCountedObjectFinal<Buffer>(buffer_->data(), buffer_->size(),
+       new_capacity);
+   RTC_DCHECK(IsConsistent());
+ }
+Index: webrtc/src/webrtc/base/copyonwritebuffer.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/copyonwritebuffer.h	2017-01-12 16:03:58.024140826 +0300
++++ webrtc/src/webrtc/base/copyonwritebuffer.h	2017-01-12 16:03:58.023140831 +0300
+@@ -153,9 +153,9 @@ class CopyOnWriteBuffer {
+   void SetData(const T* data, size_t size) {
+     RTC_DCHECK(IsConsistent());
+     if (!buffer_) {
+-      buffer_ = size > 0 ? new RefCountedObject<Buffer>(data, size) : nullptr;
++      buffer_ = size > 0 ? new RefCountedObjectFinal<Buffer>(data, size) : nullptr;
+     } else if (!buffer_->HasOneRef()) {
+-      buffer_ = new RefCountedObject<Buffer>(data, size, buffer_->capacity());
++      buffer_ = new RefCountedObjectFinal<Buffer>(data, size, buffer_->capacity());
+     } else {
+       buffer_->SetData(data, size);
+     }
+@@ -185,7 +185,7 @@ class CopyOnWriteBuffer {
+   void AppendData(const T* data, size_t size) {
+     RTC_DCHECK(IsConsistent());
+     if (!buffer_) {
+-      buffer_ = new RefCountedObject<Buffer>(data, size);
++      buffer_ = new RefCountedObjectFinal<Buffer>(data, size);
+       RTC_DCHECK(IsConsistent());
+       return;
+     }
+@@ -239,7 +239,7 @@ class CopyOnWriteBuffer {
+   }
+ 
+   // buffer_ is either null, or points to an rtc::Buffer with capacity > 0.
+-  scoped_refptr<RefCountedObject<Buffer>> buffer_;
++  scoped_refptr<RefCountedObjectFinal<Buffer>> buffer_;
+ };
+ 
+ }  // namespace rtc
+Index: webrtc/src/webrtc/base/refcountedobject.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/refcountedobject.h	2017-01-12 16:03:58.024140826 +0300
++++ webrtc/src/webrtc/base/refcountedobject.h	2017-01-12 16:03:58.023140831 +0300
+@@ -56,6 +56,39 @@ class RefCountedObject : public T {
+   mutable volatile int ref_count_ = 0;
+ };
+ 
++template <class T>
++class RefCountedObjectFinal final : public T {
++ public:
++  RefCountedObjectFinal() = default;
++
++  template<typename... Args>
++  explicit RefCountedObjectFinal(Args&&... args) : T(std::forward< Args >(args)...) {
++  }
++
++  int AddRef() const noexcept { return AtomicOps::Increment(&ref_count_); }
++
++  int Release() const noexcept {
++    int count = AtomicOps::Decrement(&ref_count_);
++    if (!count) {
++      delete this;
++    }
++    return count;
++  }
++
++  // Return whether the reference count is one. If the reference count is used
++  // in the conventional way, a reference count of 1 implies that the current
++  // thread owns the reference and no other thread shares it. This call
++  // performs the test for a reference count of one, and performs the memory
++  // barrier needed for the owning thread to act on the object, knowing that it
++  // has exclusive access to the object.
++  bool HasOneRef() const noexcept {
++    return AtomicOps::AcquireLoad(&ref_count_) == 1;
++  }
++
++ protected:
++  mutable volatile int ref_count_ = 0;
++};
++
+ }  // namespace rtc
+ 
+ #endif  // WEBRTC_BASE_REFCOUNTEDOBJECT_H_

@@ -1,0 +1,79 @@
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtcp_sender.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtcp_sender.cc	2017-01-12 16:03:17.024328641 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtcp_sender.cc	2017-01-12 16:03:17.020328659 +0300
+@@ -296,12 +296,7 @@ void RTCPSender::SetLastRtpTime(uint32_t
+                                 int64_t capture_time_ms) {
+   rtc::CritScope lock(&critical_section_rtcp_sender_);
+   last_rtp_timestamp_ = rtp_timestamp;
+-  if (capture_time_ms < 0) {
+-    // We don't currently get a capture time from VoiceEngine.
+-    last_frame_capture_time_ms_ = clock_->TimeInMilliseconds();
+-  } else {
+-    last_frame_capture_time_ms_ = capture_time_ms;
+-  }
++  last_frame_capture_time_ms_ = capture_time_ms;
+ }
+ 
+ void RTCPSender::SetSSRC(uint32_t ssrc) {
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc	2017-01-12 16:03:17.024328641 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc	2017-01-12 16:03:17.021328655 +0300
+@@ -421,6 +421,7 @@ bool RTPSender::SendOutgoingData(FrameTy
+            frame_type == kEmptyFrame);
+ 
+     result = audio_->SendAudio(frame_type, payload_type, rtp_timestamp,
++                               capture_time_ms,
+                                payload_data, payload_size, fragmentation);
+   } else {
+     TRACE_EVENT_ASYNC_STEP1("webrtc", "Video", capture_time_ms,
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.cc	2017-01-12 16:03:17.024328641 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.cc	2017-01-12 16:03:17.021328655 +0300
+@@ -148,6 +148,7 @@ bool RTPSenderAudio::MarkerBit(FrameType
+ bool RTPSenderAudio::SendAudio(FrameType frame_type,
+                                int8_t payload_type,
+                                uint32_t rtp_timestamp,
++                               int64_t capture_time_ms,
+                                const uint8_t* payload_data,
+                                size_t payload_size,
+                                const RTPFragmentationHeader* fragmentation) {
+@@ -246,7 +247,7 @@ bool RTPSenderAudio::SendAudio(FrameType
+   packet->SetMarker(MarkerBit(frame_type, payload_type));
+   packet->SetPayloadType(payload_type);
+   packet->SetTimestamp(rtp_timestamp);
+-  packet->set_capture_time_ms(clock_->TimeInMilliseconds());
++  packet->set_capture_time_ms(capture_time_ms);
+   // Update audio level extension, if included.
+   packet->SetExtension<AudioLevel>(frame_type == kAudioFrameSpeech,
+                                    audio_level_dbov);
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.h	2017-01-12 16:03:17.024328641 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_audio.h	2017-01-12 16:03:17.021328655 +0300
+@@ -38,6 +38,7 @@ class RTPSenderAudio {
+   bool SendAudio(FrameType frame_type,
+                  int8_t payload_type,
+                  uint32_t capture_timestamp,
++                 int64_t capture_time_ms,
+                  const uint8_t* payload_data,
+                  size_t payload_size,
+                  const RTPFragmentationHeader* fragmentation);
+Index: webrtc/src/webrtc/voice_engine/channel.cc
+===================================================================
+--- webrtc.orig/src/webrtc/voice_engine/channel.cc	2017-01-12 16:03:17.024328641 +0300
++++ webrtc/src/webrtc/voice_engine/channel.cc	2017-01-12 16:03:17.023328646 +0300
+@@ -372,10 +372,7 @@ int32_t Channel::SendData(FrameType fram
+   // This call will trigger Transport::SendPacket() from the RTP/RTCP module.
+   if (!_rtpRtcpModule->SendOutgoingData(
+           (FrameType&)frameType, payloadType, timeStamp,
+-          // Leaving the time when this frame was
+-          // received from the capture device as
+-          // undefined for voice for now.
+-          -1, payloadData, payloadSize, fragmentation, nullptr, nullptr)) {
++          rtc::TimeMillis(), payloadData, payloadSize, fragmentation, nullptr, nullptr)) {
+     _engineStatisticsPtr->SetLastError(
+         VE_RTP_RTCP_MODULE_ERROR, kTraceWarning,
+         "Channel::SendData() failed to send data to RTP/RTCP module");

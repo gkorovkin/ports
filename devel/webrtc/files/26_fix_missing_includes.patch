@@ -1,0 +1,12 @@
+Index: webrtc/src/webrtc/modules/audio_coding/neteq/tick_timer.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/audio_coding/neteq/tick_timer.h	2017-01-12 16:03:52.906164154 +0300
++++ webrtc/src/webrtc/modules/audio_coding/neteq/tick_timer.h	2017-01-12 16:03:52.904164163 +0300
+@@ -11,6 +11,7 @@
+ #ifndef WEBRTC_MODULES_AUDIO_CODING_NETEQ_TICK_TIMER_H_
+ #define WEBRTC_MODULES_AUDIO_CODING_NETEQ_TICK_TIMER_H_
+ 
++#include <stdint.h> // UINT64_MAX
+ #include <memory>
+ 
+ #include "webrtc/base/checks.h"

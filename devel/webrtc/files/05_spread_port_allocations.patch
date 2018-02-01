@@ -1,0 +1,43 @@
+Distribute allocated ports over the port range so that orpaned remote clients don't knock to reused ports.
+Index: webrtc/src/webrtc/p2p/base/basicpacketsocketfactory.cc
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/base/basicpacketsocketfactory.cc	2017-01-12 16:02:49.399456449 +0300
++++ webrtc/src/webrtc/p2p/base/basicpacketsocketfactory.cc	2017-01-12 16:02:49.397456458 +0300
+@@ -25,6 +25,8 @@
+ 
+ namespace rtc {
+ 
++unsigned int BasicPacketSocketFactory::allocation_counter_ = 0;
++
+ BasicPacketSocketFactory::BasicPacketSocketFactory()
+     : thread_(Thread::Current()),
+       socket_factory_(NULL) {
+@@ -187,8 +189,13 @@ int BasicPacketSocketFactory::BindSocket
+     ret = socket->Bind(local_address);
+   } else {
+     // Otherwise, try to find a port in the provided range.
+-    for (int port = min_port; ret < 0 && port <= max_port; ++port) {
+-      ret = socket->Bind(SocketAddress(local_address.ipaddr(), port));
++    int count = max_port - min_port + 1;
++    if (count > 0) {
++      unsigned int adj = __sync_fetch_and_add(&allocation_counter_, 1u);
++      for (unsigned int i = 0; ret < 0 && i < (unsigned int)count; ++i) {
++        int port = min_port + ((adj + i) % (unsigned int)count);
++        ret = socket->Bind(rtc::SocketAddress(local_address.ipaddr(), port));
++      }
+     }
+   }
+   return ret;
+Index: webrtc/src/webrtc/p2p/base/basicpacketsocketfactory.h
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/base/basicpacketsocketfactory.h	2017-01-12 16:02:49.399456449 +0300
++++ webrtc/src/webrtc/p2p/base/basicpacketsocketfactory.h	2017-01-12 16:02:49.397456458 +0300
+@@ -41,6 +41,8 @@ class BasicPacketSocketFactory : public
+ 
+   AsyncResolverInterface* CreateAsyncResolver() override;
+ 
++  static unsigned int allocation_counter_;
++
+  private:
+   int BindSocket(AsyncSocket* socket,
+                  const SocketAddress& local_address,

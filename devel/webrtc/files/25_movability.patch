@@ -1,0 +1,868 @@
+Index: webrtc/src/webrtc/base/copyonwritebuffer.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/copyonwritebuffer.cc	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/copyonwritebuffer.cc	2017-01-12 16:03:50.451175355 +0300
+@@ -12,18 +12,6 @@
+ 
+ namespace rtc {
+ 
+-CopyOnWriteBuffer::CopyOnWriteBuffer() {
+-  RTC_DCHECK(IsConsistent());
+-}
+-
+-CopyOnWriteBuffer::CopyOnWriteBuffer(const CopyOnWriteBuffer& buf)
+-    : buffer_(buf.buffer_) {
+-}
+-
+-CopyOnWriteBuffer::CopyOnWriteBuffer(CopyOnWriteBuffer&& buf)
+-    : buffer_(std::move(buf.buffer_)) {
+-}
+-
+ CopyOnWriteBuffer::CopyOnWriteBuffer(size_t size)
+     : buffer_(size > 0 ? new RefCountedObject<Buffer>(size) : nullptr) {
+   RTC_DCHECK(IsConsistent());
+@@ -36,8 +24,6 @@ CopyOnWriteBuffer::CopyOnWriteBuffer(siz
+   RTC_DCHECK(IsConsistent());
+ }
+ 
+-CopyOnWriteBuffer::~CopyOnWriteBuffer() = default;
+-
+ bool CopyOnWriteBuffer::operator==(const CopyOnWriteBuffer& buf) const {
+   // Must either use the same buffer internally or have the same contents.
+   RTC_DCHECK(IsConsistent());
+Index: webrtc/src/webrtc/base/copyonwritebuffer.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/copyonwritebuffer.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/copyonwritebuffer.h	2017-01-12 16:03:50.451175355 +0300
+@@ -11,6 +11,8 @@
+ #ifndef WEBRTC_BASE_COPYONWRITEBUFFER_H_
+ #define WEBRTC_BASE_COPYONWRITEBUFFER_H_
+ 
++#include <cstring>
++#include <type_traits>
+ #include <algorithm>
+ #include <utility>
+ 
+@@ -24,11 +26,17 @@ namespace rtc {
+ class CopyOnWriteBuffer {
+  public:
+   // An empty buffer.
+-  CopyOnWriteBuffer();
++  CopyOnWriteBuffer() noexcept {
++    RTC_DCHECK(IsConsistent());
++  }
+   // Copy size and contents of an existing buffer.
+-  CopyOnWriteBuffer(const CopyOnWriteBuffer& buf);
++  CopyOnWriteBuffer(const CopyOnWriteBuffer& buf)
++    : buffer_(buf.buffer_) {
++  }
+   // Move contents from an existing buffer.
+-  CopyOnWriteBuffer(CopyOnWriteBuffer&& buf);
++  CopyOnWriteBuffer(CopyOnWriteBuffer&& buf) noexcept
++    : buffer_(std::move(buf.buffer_)) {
++  }
+ 
+   // Construct a buffer with the specified number of uninitialized bytes.
+   explicit CopyOnWriteBuffer(size_t size);
+@@ -59,14 +67,12 @@ class CopyOnWriteBuffer {
+   CopyOnWriteBuffer(const T (&array)[N])  // NOLINT: runtime/explicit
+       : CopyOnWriteBuffer(array, N) {}
+ 
+-  ~CopyOnWriteBuffer();
+-
+   // Get a pointer to the data. Just .data() will give you a (const) uint8_t*,
+   // but you may also use .data<int8_t>() and .data<char>().
+   template <typename T = uint8_t,
+             typename std::enable_if<
+                 internal::BufferCompat<uint8_t, T>::value>::type* = nullptr>
+-  const T* data() const {
++  const T* data() const noexcept {
+     return cdata<T>();
+   }
+ 
+@@ -89,7 +95,7 @@ class CopyOnWriteBuffer {
+   template <typename T = uint8_t,
+             typename std::enable_if<
+                 internal::BufferCompat<uint8_t, T>::value>::type* = nullptr>
+-  const T* cdata() const {
++  const T* cdata() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     if (!buffer_) {
+       return nullptr;
+@@ -97,12 +103,12 @@ class CopyOnWriteBuffer {
+     return buffer_->data<T>();
+   }
+ 
+-  size_t size() const {
++  size_t size() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     return buffer_ ? buffer_->size() : 0;
+   }
+ 
+-  size_t capacity() const {
++  size_t capacity() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     return buffer_ ? buffer_->capacity() : 0;
+   }
+@@ -116,7 +122,7 @@ class CopyOnWriteBuffer {
+     return *this;
+   }
+ 
+-  CopyOnWriteBuffer& operator=(CopyOnWriteBuffer&& buf) {
++  CopyOnWriteBuffer& operator=(CopyOnWriteBuffer&& buf) noexcept {
+     RTC_DCHECK(IsConsistent());
+     RTC_DCHECK(buf.IsConsistent());
+     buffer_ = std::move(buf.buffer_);
+@@ -134,7 +140,7 @@ class CopyOnWriteBuffer {
+     return data()[index];
+   }
+ 
+-  uint8_t operator[](size_t index) const {
++  uint8_t operator[](size_t index) const noexcept {
+     RTC_DCHECK_LT(index, size());
+     return cdata()[index];
+   }
+@@ -218,8 +224,8 @@ class CopyOnWriteBuffer {
+   void Clear();
+ 
+   // Swaps two buffers.
+-  friend void swap(CopyOnWriteBuffer& a, CopyOnWriteBuffer& b) {
+-    std::swap(a.buffer_, b.buffer_);
++  friend void swap(CopyOnWriteBuffer& a, CopyOnWriteBuffer& b) noexcept {
++    a.buffer_.swap(b.buffer_);
+   }
+ 
+  private:
+@@ -228,7 +234,7 @@ class CopyOnWriteBuffer {
+   void CloneDataIfReferenced(size_t new_capacity);
+ 
+   // Pre- and postcondition of all methods.
+-  bool IsConsistent() const {
++  bool IsConsistent() const noexcept {
+     return (!buffer_ || buffer_->capacity() > 0);
+   }
+ 
+Index: webrtc/src/webrtc/base/scoped_ref_ptr.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/scoped_ref_ptr.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/scoped_ref_ptr.h	2017-01-12 16:03:50.452175351 +0300
+@@ -64,13 +64,14 @@
+ #define WEBRTC_BASE_SCOPED_REF_PTR_H_
+ 
+ #include <memory>
++#include <utility>
+ 
+ namespace rtc {
+ 
+ template <class T>
+ class scoped_refptr {
+  public:
+-  scoped_refptr() : ptr_(NULL) {
++  constexpr scoped_refptr() noexcept : ptr_(NULL) {
+   }
+ 
+   scoped_refptr(T* p) : ptr_(p) {
+@@ -90,26 +91,26 @@ class scoped_refptr {
+   }
+ 
+   // Move constructors.
+-  scoped_refptr(scoped_refptr<T>&& r) : ptr_(r.release()) {}
++  scoped_refptr(scoped_refptr<T>&& r) noexcept : ptr_(r.release()) {}
+ 
+   template <typename U>
+-  scoped_refptr(scoped_refptr<U>&& r) : ptr_(r.release()) {}
++  scoped_refptr(scoped_refptr<U>&& r) noexcept : ptr_(r.release()) {}
+ 
+   ~scoped_refptr() {
+     if (ptr_)
+       ptr_->Release();
+   }
+ 
+-  T* get() const { return ptr_; }
+-  operator T*() const { return ptr_; }
+-  T* operator->() const { return ptr_; }
++  T* get() const noexcept { return ptr_; }
++  operator T*() const noexcept { return ptr_; }
++  T* operator->() const noexcept { return ptr_; }
+ 
+   // Release a pointer.
+   // The return value is the current pointer held by this object.
+   // If this object holds a NULL pointer, the return value is NULL.
+   // After this operation, this object will hold a NULL pointer,
+   // and will not own the object any more.
+-  T* release() {
++  T* release() noexcept {
+     T* retVal = ptr_;
+     ptr_ = NULL;
+     return retVal;
+@@ -134,27 +135,31 @@ class scoped_refptr {
+     return *this = r.get();
+   }
+ 
+-  scoped_refptr<T>& operator=(scoped_refptr<T>&& r) {
++  scoped_refptr<T>& operator=(scoped_refptr<T>&& r) noexcept {
+     scoped_refptr<T>(std::move(r)).swap(*this);
+     return *this;
+   }
+ 
+   template <typename U>
+-  scoped_refptr<T>& operator=(scoped_refptr<U>&& r) {
++  scoped_refptr<T>& operator=(scoped_refptr<U>&& r) noexcept {
+     scoped_refptr<T>(std::move(r)).swap(*this);
+     return *this;
+   }
+ 
+-  void swap(T** pp) {
++  void swap(T** pp) noexcept {
+     T* p = ptr_;
+     ptr_ = *pp;
+     *pp = p;
+   }
+ 
+-  void swap(scoped_refptr<T>& r) {
++  void swap(scoped_refptr<T>& r) noexcept {
+     swap(&r.ptr_);
+   }
+ 
++  friend void swap(scoped_refptr<T>& left, scoped_refptr<T>& right) noexcept {
++    left.swap(right);
++  }
++
+  protected:
+   T* ptr_;
+ };
+Index: webrtc/src/webrtc/base/buffer.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/buffer.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/buffer.h	2017-01-12 16:03:50.452175351 +0300
+@@ -58,7 +58,7 @@ class BufferT {
+ 
+  public:
+   // An empty BufferT.
+-  BufferT() : size_(0), capacity_(0), data_(nullptr) {
++  BufferT() noexcept : size_(0), capacity_(0), data_(nullptr) {
+     RTC_DCHECK(IsConsistent());
+   }
+ 
+@@ -67,7 +67,7 @@ class BufferT {
+   BufferT(const BufferT&) = delete;
+   BufferT& operator=(const BufferT&) = delete;
+ 
+-  BufferT(BufferT&& buf)
++  BufferT(BufferT&& buf) noexcept
+       : size_(buf.size()),
+         capacity_(buf.capacity()),
+         data_(std::move(buf.data_)) {
+@@ -112,7 +112,7 @@ class BufferT {
+   template <typename U = T,
+             typename std::enable_if<
+                 internal::BufferCompat<T, U>::value>::type* = nullptr>
+-  const U* data() const {
++  const U* data() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     return reinterpret_cast<U*>(data_.get());
+   }
+@@ -120,27 +120,27 @@ class BufferT {
+   template <typename U = T,
+             typename std::enable_if<
+                 internal::BufferCompat<T, U>::value>::type* = nullptr>
+-  U* data() {
++  U* data() noexcept {
+     RTC_DCHECK(IsConsistent());
+     return reinterpret_cast<U*>(data_.get());
+   }
+ 
+-  bool empty() const {
++  bool empty() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     return size_ == 0;
+   }
+ 
+-  size_t size() const {
++  size_t size() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     return size_;
+   }
+ 
+-  size_t capacity() const {
++  size_t capacity() const noexcept {
+     RTC_DCHECK(IsConsistent());
+     return capacity_;
+   }
+ 
+-  BufferT& operator=(BufferT&& buf) {
++  BufferT& operator=(BufferT&& buf) noexcept {
+     RTC_DCHECK(IsConsistent());
+     RTC_DCHECK(buf.IsConsistent());
+     size_ = buf.size_;
+@@ -169,12 +169,12 @@ class BufferT {
+ 
+   bool operator!=(const BufferT& buf) const { return !(*this == buf); }
+ 
+-  T& operator[](size_t index) {
++  T& operator[](size_t index) noexcept {
+     RTC_DCHECK_LT(index, size_);
+     return data()[index];
+   }
+ 
+-  T operator[](size_t index) const {
++  T operator[](size_t index) const noexcept {
+     RTC_DCHECK_LT(index, size_);
+     return data()[index];
+   }
+@@ -303,13 +303,13 @@ class BufferT {
+ 
+   // Resets the buffer to zero size without altering capacity. Works even if the
+   // buffer has been moved from.
+-  void Clear() {
++  void Clear() noexcept {
+     size_ = 0;
+     RTC_DCHECK(IsConsistent());
+   }
+ 
+   // Swaps two buffers. Also works for buffers that have been moved from.
+-  friend void swap(BufferT& a, BufferT& b) {
++  friend void swap(BufferT& a, BufferT& b) noexcept {
+     using std::swap;
+     swap(a.size_, b.size_);
+     swap(a.capacity_, b.capacity_);
+@@ -342,13 +342,13 @@ class BufferT {
+   // Postcondition for all methods except move construction and move
+   // assignment, which leave the moved-from object in a possibly inconsistent
+   // state.
+-  bool IsConsistent() const {
++  bool IsConsistent() const noexcept {
+     return (data_ || capacity_ == 0) && capacity_ >= size_;
+   }
+ 
+   // Called when *this has been moved from. Conceptually it's a no-op, but we
+   // can mutate the state slightly to help subsequent sanity checks catch bugs.
+-  void OnMovedFrom() {
++  void OnMovedFrom() noexcept {
+ #if RTC_DCHECK_IS_ON
+     // Make *this consistent and empty. Shouldn't be necessary, but better safe
+     // than sorry.
+Index: webrtc/src/webrtc/base/array_view.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/array_view.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/array_view.h	2017-01-12 16:03:50.452175351 +0300
+@@ -77,19 +77,19 @@ class ArrayView final {
+   using const_iterator = const T*;
+ 
+   // Construct an empty ArrayView.
+-  ArrayView() : ArrayView(static_cast<T*>(nullptr), 0) {}
+-  ArrayView(std::nullptr_t) : ArrayView() {}
++  ArrayView() noexcept : ArrayView(static_cast<T*>(nullptr), 0) {}
++  ArrayView(std::nullptr_t) noexcept : ArrayView() {}
+ 
+   // Construct an ArrayView for a (pointer,size) pair.
+   template <typename U>
+-  ArrayView(U* data, size_t size)
++  ArrayView(U* data, size_t size) noexcept
+       : data_(size == 0 ? nullptr : data), size_(size) {
+     CheckInvariant();
+   }
+ 
+   // Construct an ArrayView for an array.
+   template <typename U, size_t N>
+-  ArrayView(U (&array)[N]) : ArrayView(&array[0], N) {}
++  ArrayView(U (&array)[N]) noexcept : ArrayView(&array[0], N) {}
+ 
+   // Construct an ArrayView for any type U that has a size() method whose
+   // return value converts implicitly to size_t, and a data() method whose
+@@ -102,42 +102,42 @@ class ArrayView final {
+   template <
+       typename U,
+       typename std::enable_if<HasDataAndSize<U, T>::value>::type* = nullptr>
+-  ArrayView(U& u) : ArrayView(u.data(), u.size()) {}
++  ArrayView(U& u) noexcept : ArrayView(u.data(), u.size()) {}
+ 
+   // Indexing, size, and iteration. These allow mutation even if the ArrayView
+   // is const, because the ArrayView doesn't own the array. (To prevent
+   // mutation, use ArrayView<const T>.)
+-  size_t size() const { return size_; }
+-  bool empty() const { return size_ == 0; }
+-  T* data() const { return data_; }
+-  T& operator[](size_t idx) const {
++  size_t size() const noexcept { return size_; }
++  bool empty() const noexcept { return size_ == 0; }
++  T* data() const noexcept { return data_; }
++  T& operator[](size_t idx) const noexcept {
+     RTC_DCHECK_LT(idx, size_);
+     RTC_DCHECK(data_);  // Follows from size_ > idx and the class invariant.
+     return data_[idx];
+   }
+-  T* begin() const { return data_; }
+-  T* end() const { return data_ + size_; }
+-  const T* cbegin() const { return data_; }
+-  const T* cend() const { return data_ + size_; }
++  T* begin() const noexcept { return data_; }
++  T* end() const noexcept { return data_ + size_; }
++  const T* cbegin() const noexcept { return data_; }
++  const T* cend() const noexcept { return data_ + size_; }
+ 
+   // Comparing two ArrayViews compares their (pointer,size) pairs; it does
+   // *not* dereference the pointers.
+-  friend bool operator==(const ArrayView& a, const ArrayView& b) {
++  friend bool operator==(const ArrayView& a, const ArrayView& b) noexcept {
+     return a.data_ == b.data_ && a.size_ == b.size_;
+   }
+-  friend bool operator!=(const ArrayView& a, const ArrayView& b) {
++  friend bool operator!=(const ArrayView& a, const ArrayView& b) noexcept {
+     return !(a == b);
+   }
+ 
+  private:
+   // Invariant: !data_ iff size_ == 0.
+-  void CheckInvariant() const { RTC_DCHECK_EQ(!data_, size_ == 0); }
++  void CheckInvariant() const noexcept { RTC_DCHECK_EQ(!data_, size_ == 0); }
+   T* data_;
+   size_t size_;
+ };
+ 
+ template <typename T>
+-inline ArrayView<T> MakeArrayView(T* data, size_t size) {
++inline ArrayView<T> MakeArrayView(T* data, size_t size) noexcept {
+   return ArrayView<T>(data, size);
+ }
+ 
+Index: webrtc/src/webrtc/base/optional.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/optional.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/optional.h	2017-01-12 16:03:50.453175346 +0300
+@@ -11,6 +11,7 @@
+ #ifndef WEBRTC_BASE_OPTIONAL_H_
+ #define WEBRTC_BASE_OPTIONAL_H_
+ 
++#include <new>
+ #include <algorithm>
+ #include <memory>
+ #include <utility>
+@@ -29,7 +30,7 @@ namespace optional_internal {
+ void* FunctionThatDoesNothingImpl(void*);
+ 
+ template <typename T>
+-inline T* FunctionThatDoesNothing(T* x) {
++inline T* FunctionThatDoesNothing(T* x) noexcept {
+   return reinterpret_cast<T*>(
+       FunctionThatDoesNothingImpl(reinterpret_cast<void*>(x)));
+ }
+@@ -37,10 +38,13 @@ inline T* FunctionThatDoesNothing(T* x)
+ #else
+ 
+ template <typename T>
+-inline T* FunctionThatDoesNothing(T* x) { return x; }
++inline T* FunctionThatDoesNothing(T* x) noexcept { return x; }
+ 
+ #endif
+ 
++template< typename T >
++T& decllval() noexcept;
++
+ }  // namespace optional_internal
+ 
+ // Simple std::optional-wannabe. It either contains a T or not.
+@@ -83,20 +87,20 @@ template <typename T>
+ class Optional final {
+  public:
+   // Construct an empty Optional.
+-  Optional() : has_value_(false), empty_('\0') {
++  Optional() noexcept : has_value_(false), empty_('\0') {
+     PoisonValue();
+   }
+ 
+   // Construct an Optional that contains a value.
+-  explicit Optional(const T& value) : has_value_(true) {
++  explicit Optional(const T& value) noexcept(noexcept(new (&optional_internal::decllval<T>()) T(value))) : has_value_(true) {
+     new (&value_) T(value);
+   }
+-  explicit Optional(T&& value) : has_value_(true) {
++  explicit Optional(T&& value) noexcept(noexcept(new (&optional_internal::decllval<T>()) T(std::move(value)))) : has_value_(true) {
+     new (&value_) T(std::move(value));
+   }
+ 
+   // Copy constructor: copies the value from m if it has one.
+-  Optional(const Optional& m) : has_value_(m.has_value_) {
++  Optional(const Optional& m) noexcept(noexcept(new (&optional_internal::decllval<T>()) T(m.value_))) : has_value_(m.has_value_) {
+     if (has_value_)
+       new (&value_) T(m.value_);
+     else
+@@ -107,14 +111,14 @@ class Optional final {
+   // still in a state where it has a value, but a moved-from one (the
+   // properties of which depends on T; the only general guarantee is that we
+   // can destroy m).
+-  Optional(Optional&& m) : has_value_(m.has_value_) {
++  Optional(Optional&& m) noexcept(noexcept(new (&optional_internal::decllval<T>()) T(std::move(m.value_)))) : has_value_(m.has_value_) {
+     if (has_value_)
+       new (&value_) T(std::move(m.value_));
+     else
+       PoisonValue();
+   }
+ 
+-  ~Optional() {
++  ~Optional() noexcept {
+     if (has_value_)
+       value_.~T();
+     else
+@@ -123,7 +127,7 @@ class Optional final {
+ 
+   // Copy assignment. Uses T's copy assignment if both sides have a value, T's
+   // copy constructor if only the right-hand side has a value.
+-  Optional& operator=(const Optional& m) {
++  Optional& operator=(const Optional& m) noexcept(noexcept(new (&optional_internal::decllval<T>()) T(m.value_)) && noexcept(optional_internal::decllval<T>() = m.value_)) {
+     if (m.has_value_) {
+       if (has_value_) {
+         value_ = m.value_;  // T's copy assignment.
+@@ -141,7 +145,7 @@ class Optional final {
+   // Move assignment. Uses T's move assignment if both sides have a value, T's
+   // move constructor if only the right-hand side has a value. The state of m
+   // after it's been moved from is as for the move constructor.
+-  Optional& operator=(Optional&& m) {
++  Optional& operator=(Optional&& m) noexcept(noexcept(new (&optional_internal::decllval<T>()) T(std::move(m.value_))) && noexcept(optional_internal::decllval<T>() = std::move(m.value_))) {
+     if (m.has_value_) {
+       if (has_value_) {
+         value_ = std::move(m.value_);  // T's move assignment.
+@@ -158,7 +162,7 @@ class Optional final {
+ 
+   // Swap the values if both m1 and m2 have values; move the value if only one
+   // of them has one.
+-  friend void swap(Optional& m1, Optional& m2) {
++  friend void swap(Optional& m1, Optional& m2) noexcept {
+     if (m1.has_value_) {
+       if (m2.has_value_) {
+         // Both have values: swap.
+@@ -185,7 +189,7 @@ class Optional final {
+   }
+ 
+   // Destroy any contained value. Has no effect if we have no value.
+-  void reset() {
++  void reset() noexcept {
+     if (!has_value_)
+       return;
+     value_.~T();
+@@ -204,22 +208,22 @@ class Optional final {
+   }
+ 
+   // Conversion to bool to test if we have a value.
+-  explicit operator bool() const { return has_value_; }
++  explicit operator bool() const noexcept { return has_value_; }
+ 
+   // Dereferencing. Only allowed if we have a value.
+-  const T* operator->() const {
++  const T* operator->() const noexcept {
+     RTC_DCHECK(has_value_);
+     return &value_;
+   }
+-  T* operator->() {
++  T* operator->() noexcept {
+     RTC_DCHECK(has_value_);
+     return &value_;
+   }
+-  const T& operator*() const {
++  const T& operator*() const noexcept {
+     RTC_DCHECK(has_value_);
+     return value_;
+   }
+-  T& operator*() {
++  T& operator*() noexcept {
+     RTC_DCHECK(has_value_);
+     return value_;
+   }
+@@ -259,13 +263,13 @@ class Optional final {
+ 
+  private:
+   // Tell sanitizers that value_ shouldn't be touched.
+-  void PoisonValue() {
++  void PoisonValue() noexcept {
+     rtc::AsanPoison(rtc::MakeArrayView(&value_, 1));
+     rtc::MsanMarkUninitialized(rtc::MakeArrayView(&value_, 1));
+   }
+ 
+   // Tell sanitizers that value_ is OK to touch again.
+-  void UnpoisonValue() {
++  void UnpoisonValue() noexcept {
+     rtc::AsanUnpoison(rtc::MakeArrayView(&value_, 1));
+   }
+ 
+Index: webrtc/src/webrtc/media/base/codec.cc
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/codec.cc	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/media/base/codec.cc	2017-01-12 16:03:50.453175346 +0300
+@@ -57,6 +57,18 @@ void FeedbackParams::Add(const FeedbackP
+   ASSERT(!HasDuplicateEntries());
+ }
+ 
++void FeedbackParams::Add(FeedbackParam&& param) {
++  if (param.id().empty()) {
++    return;
++  }
++  if (Has(param)) {
++    // Param already in |this|.
++    return;
++  }
++  params_.push_back(std::move(param));
++  ASSERT(!HasDuplicateEntries());
++}
++
+ void FeedbackParams::Intersect(const FeedbackParams& from) {
+   std::vector<FeedbackParam>::iterator iter_to = params_.begin();
+   while (iter_to != params_.end()) {
+@@ -87,9 +99,23 @@ Codec::Codec(int id, const std::string&
+ Codec::Codec() : id(0), clockrate(0) {}
+ 
+ Codec::Codec(const Codec& c) = default;
+-Codec::Codec(Codec&& c) = default;
++Codec::Codec(Codec&& c) noexcept :
++  id(c.id),
++  name(std::move(c.name)),
++  clockrate(c.clockrate),
++  params(std::move(c.params)),
++  feedback_params(std::move(c.feedback_params))
++{
++}
+ Codec& Codec::operator=(const Codec& c) = default;
+-Codec& Codec::operator=(Codec&& c) = default;
++Codec& Codec::operator=(Codec&& c) noexcept {
++  id = c.id;
++  name = std::move(c.name);
++  clockrate = c.clockrate;
++  params = std::move(c.params);
++  feedback_params = std::move(c.feedback_params);
++  return *this;
++}
+ 
+ bool Codec::operator==(const Codec& c) const {
+   return this->id == c.id &&  // id is reserved in objective-c
+@@ -137,6 +163,10 @@ void Codec::AddFeedbackParam(const Feedb
+   feedback_params.Add(param);
+ }
+ 
++void Codec::AddFeedbackParam(FeedbackParam&& param) {
++  feedback_params.Add(std::move(param));
++}
++
+ bool Codec::HasFeedbackParam(const FeedbackParam& param) const {
+   return feedback_params.Has(param);
+ }
+@@ -164,9 +194,9 @@ AudioCodec::AudioCodec() : Codec(), bitr
+ }
+ 
+ AudioCodec::AudioCodec(const AudioCodec& c) = default;
+-AudioCodec::AudioCodec(AudioCodec&& c) = default;
++AudioCodec::AudioCodec(AudioCodec&& c) noexcept = default;
+ AudioCodec& AudioCodec::operator=(const AudioCodec& c) = default;
+-AudioCodec& AudioCodec::operator=(AudioCodec&& c) = default;
++AudioCodec& AudioCodec::operator=(AudioCodec&& c) noexcept = default;
+ 
+ bool AudioCodec::operator==(const AudioCodec& c) const {
+   return bitrate == c.bitrate && channels == c.channels && Codec::operator==(c);
+@@ -219,9 +249,9 @@ VideoCodec::VideoCodec() : Codec() {
+ }
+ 
+ VideoCodec::VideoCodec(const VideoCodec& c) = default;
+-VideoCodec::VideoCodec(VideoCodec&& c) = default;
++VideoCodec::VideoCodec(VideoCodec&& c) noexcept = default;
+ VideoCodec& VideoCodec::operator=(const VideoCodec& c) = default;
+-VideoCodec& VideoCodec::operator=(VideoCodec&& c) = default;
++VideoCodec& VideoCodec::operator=(VideoCodec&& c) noexcept = default;
+ 
+ bool VideoCodec::operator==(const VideoCodec& c) const {
+   return Codec::operator==(c);
+@@ -290,9 +320,9 @@ DataCodec::DataCodec() : Codec() {
+ }
+ 
+ DataCodec::DataCodec(const DataCodec& c) = default;
+-DataCodec::DataCodec(DataCodec&& c) = default;
++DataCodec::DataCodec(DataCodec&& c) noexcept = default;
+ DataCodec& DataCodec::operator=(const DataCodec& c) = default;
+-DataCodec& DataCodec::operator=(DataCodec&& c) = default;
++DataCodec& DataCodec::operator=(DataCodec&& c) noexcept = default;
+ 
+ std::string DataCodec::ToString() const {
+   std::ostringstream os;
+Index: webrtc/src/webrtc/media/base/codec.h
+===================================================================
+--- webrtc.orig/src/webrtc/media/base/codec.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/media/base/codec.h	2017-01-12 16:03:50.453175346 +0300
+@@ -15,6 +15,7 @@
+ #include <set>
+ #include <string>
+ #include <vector>
++#include <utility>
+ 
+ #include "webrtc/api/rtpparameters.h"
+ #include "webrtc/common_types.h"
+@@ -26,6 +27,14 @@ typedef std::map<std::string, std::strin
+ 
+ class FeedbackParam {
+  public:
++  FeedbackParam(FeedbackParam const&) = default;
++  FeedbackParam(FeedbackParam&& that) noexcept : id_(std::move(that.id_)), param_(std::move(that.param_)) {}
++  FeedbackParam& operator= (FeedbackParam const&) = default;
++  FeedbackParam& operator= (FeedbackParam&& that) noexcept {
++    id_ = std::move(that.id_);
++    param_ = std::move(that.param_);
++    return *this;
++  }
+   FeedbackParam(const std::string& id, const std::string& param)
+       : id_(id),
+         param_(param) {
+@@ -46,10 +55,20 @@ class FeedbackParam {
+ 
+ class FeedbackParams {
+  public:
++  FeedbackParams() = default;
++  FeedbackParams(FeedbackParams const&) = default;
++  FeedbackParams(FeedbackParams&& that) noexcept : params_(std::move(that.params_)) {}
++  FeedbackParams& operator= (FeedbackParams const&) = default;
++  FeedbackParams& operator= (FeedbackParams&& that) noexcept {
++    params_ = std::move(that.params_);
++    return *this;
++  }
++
+   bool operator==(const FeedbackParams& other) const;
+ 
+   bool Has(const FeedbackParam& param) const;
+   void Add(const FeedbackParam& param);
++  void Add(FeedbackParam&& param);
+ 
+   void Intersect(const FeedbackParams& from);
+ 
+@@ -72,7 +91,7 @@ struct Codec {
+   // Creates an empty codec.
+   Codec();
+   Codec(const Codec& c);
+-  Codec(Codec&& c);
++  Codec(Codec&& c) noexcept;
+   virtual ~Codec() {}
+ 
+   // Indicates if this codec is compatible with the specified codec.
+@@ -91,6 +110,7 @@ struct Codec {
+ 
+   bool HasFeedbackParam(const FeedbackParam& param) const;
+   void AddFeedbackParam(const FeedbackParam& param);
++  void AddFeedbackParam(FeedbackParam&& param);
+ 
+   // Filter |this| feedbacks params such that only those shared by both |this|
+   // and |other| are kept.
+@@ -99,7 +119,7 @@ struct Codec {
+   virtual webrtc::RtpCodecParameters ToCodecParameters() const;
+ 
+   Codec& operator=(const Codec& c);
+-  Codec& operator=(Codec&& c);
++  Codec& operator=(Codec&& c) noexcept;
+ 
+   bool operator==(const Codec& c) const;
+ 
+@@ -121,7 +141,7 @@ struct AudioCodec : public Codec {
+   // Creates an empty codec.
+   AudioCodec();
+   AudioCodec(const AudioCodec& c);
+-  AudioCodec(AudioCodec&& c);
++  AudioCodec(AudioCodec&& c) noexcept;
+   virtual ~AudioCodec() {}
+ 
+   // Indicates if this codec is compatible with the specified codec.
+@@ -132,7 +152,7 @@ struct AudioCodec : public Codec {
+   webrtc::RtpCodecParameters ToCodecParameters() const override;
+ 
+   AudioCodec& operator=(const AudioCodec& c);
+-  AudioCodec& operator=(AudioCodec&& c);
++  AudioCodec& operator=(AudioCodec&& c) noexcept;
+ 
+   bool operator==(const AudioCodec& c) const;
+ 
+@@ -149,7 +169,7 @@ struct VideoCodec : public Codec {
+   // Creates an empty codec.
+   VideoCodec();
+   VideoCodec(const VideoCodec& c);
+-  VideoCodec(VideoCodec&& c);
++  VideoCodec(VideoCodec&& c) noexcept;
+   virtual ~VideoCodec() {}
+ 
+   // Indicates if this video codec is the same as the other video codec, e.g. if
+@@ -160,7 +180,7 @@ struct VideoCodec : public Codec {
+   std::string ToString() const;
+ 
+   VideoCodec& operator=(const VideoCodec& c);
+-  VideoCodec& operator=(VideoCodec&& c);
++  VideoCodec& operator=(VideoCodec&& c) noexcept;
+ 
+   bool operator==(const VideoCodec& c) const;
+ 
+@@ -190,11 +210,11 @@ struct DataCodec : public Codec {
+   DataCodec(int id, const std::string& name);
+   DataCodec();
+   DataCodec(const DataCodec& c);
+-  DataCodec(DataCodec&& c);
++  DataCodec(DataCodec&& c) noexcept;
+   virtual ~DataCodec() {}
+ 
+   DataCodec& operator=(const DataCodec& c);
+-  DataCodec& operator=(DataCodec&& c);
++  DataCodec& operator=(DataCodec&& c) noexcept;
+ 
+   std::string ToString() const;
+ };
+Index: webrtc/src/webrtc/base/messagequeue.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/messagequeue.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/base/messagequeue.h	2017-01-12 16:03:50.454175342 +0300
+@@ -142,9 +142,11 @@ const uint32_t MQID_DISPOSE = static_cas
+ // No destructor
+ 
+ struct Message {
+-  Message()
++  constexpr Message() noexcept
+       : phandler(nullptr), message_id(0), pdata(nullptr), ts_sensitive(0) {}
+-  inline bool Match(MessageHandler* handler, uint32_t id) const {
++  Message(Message const&) noexcept = default;
++  Message& operator= (Message const&) noexcept = default;
++  inline bool Match(MessageHandler* handler, uint32_t id) const noexcept {
+     return (handler == NULL || handler == phandler)
+            && (id == MQID_ANY || id == message_id);
+   }
+@@ -166,9 +168,11 @@ class DelayedMessage {
+                  int64_t trigger,
+                  uint32_t num,
+                  const Message& msg)
++                 noexcept
+       : cmsDelay_(delay), msTrigger_(trigger), num_(num), msg_(msg) {}
+-
+-  bool operator< (const DelayedMessage& dmsg) const {
++  DelayedMessage(DelayedMessage const&) noexcept = default;
++  DelayedMessage& operator= (DelayedMessage const&) noexcept = default;
++  bool operator< (const DelayedMessage& dmsg) const noexcept {
+     return (dmsg.msTrigger_ < msTrigger_)
+            || ((dmsg.msTrigger_ == msTrigger_) && (dmsg.num_ < num_));
+   }
+Index: webrtc/src/webrtc/config.h
+===================================================================
+--- webrtc.orig/src/webrtc/config.h	2017-01-12 16:03:50.455175337 +0300
++++ webrtc/src/webrtc/config.h	2017-01-12 16:03:50.454175342 +0300
+@@ -15,6 +15,7 @@
+ 
+ #include <string>
+ #include <vector>
++#include <utility>
+ 
+ #include "webrtc/base/basictypes.h"
+ #include "webrtc/base/optional.h"
+@@ -76,8 +77,16 @@ struct FlexfecConfig {
+ 
+ // RTP header extension, see RFC 5285.
+ struct RtpExtension {
+-  RtpExtension() : id(0) {}
++  RtpExtension() noexcept : id(0) {}
+   RtpExtension(const std::string& uri, int id) : uri(uri), id(id) {}
++  RtpExtension(RtpExtension const&) = default;
++  RtpExtension(RtpExtension&& that) noexcept : uri(std::move(that.uri)), id(that.id) {}
++  RtpExtension& operator= (RtpExtension const&) = default;
++  RtpExtension& operator= (RtpExtension&& that) noexcept {
++    uri = std::move(that.uri);
++    id = that.id;
++    return *this;
++  }
+   std::string ToString() const;
+   bool operator==(const RtpExtension& rhs) const {
+     return uri == rhs.uri && id == rhs.id;

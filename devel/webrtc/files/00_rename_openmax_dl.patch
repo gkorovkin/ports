@@ -1,0 +1,28 @@
+Renames OpenMAX DL static library name in order to avoid clash with libdl.so, the dynamic linker library.
+
+Index: webrtc/src/chromium/src/third_party/openmax_dl/dl/BUILD.gn
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/openmax_dl/dl/BUILD.gn	2017-01-12 16:02:30.378545075 +0300
++++ webrtc/src/chromium/src/third_party/openmax_dl/dl/BUILD.gn	2017-01-12 16:02:30.374545094 +0300
+@@ -38,7 +38,7 @@ config("dl_config") {
+ }
+ 
+ # GYP: third_party/openmax_dl/dl/dl.gyp:openmax_dl
+-static_library("dl") {
++static_library("openmax_dl") {
+   public_configs = [ ":dl_config" ]
+   configs -= [ "//build/config/compiler:chromium_code" ]
+   configs += [ "//build/config/compiler:no_chromium_code" ]
+Index: webrtc/src/webrtc/common_audio/BUILD.gn
+===================================================================
+--- webrtc.orig/src/webrtc/common_audio/BUILD.gn	2017-01-12 16:02:30.378545075 +0300
++++ webrtc/src/webrtc/common_audio/BUILD.gn	2017-01-12 16:02:30.376545085 +0300
+@@ -120,7 +120,7 @@ rtc_static_library("common_audio") {
+     ]
+     defines += [ "RTC_USE_OPENMAX_DL" ]
+     if (rtc_build_openmax_dl) {
+-      deps += [ "//third_party/openmax_dl/dl" ]
++      deps += [ "//third_party/openmax_dl/dl:openmax_dl" ]
+     }
+   }
+ 

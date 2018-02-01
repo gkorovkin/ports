@@ -1,0 +1,379 @@
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.cc	2017-01-12 16:03:38.377230556 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.cc	2017-01-12 16:03:38.374230570 +0300
+@@ -399,6 +399,26 @@ bool ModuleRtpRtcpImpl::SendOutgoingData
+       payload_size, fragmentation, rtp_video_header, transport_frame_id_out);
+ }
+ 
++bool ModuleRtpRtcpImpl::SendOutgoingPackets(
++    PacketizedPayload* payloads,
++    size_t payload_count,
++    uint8_t payload_type,
++    FrameType frame_type,
++    StorageType storage,
++    uint32_t time_stamp,
++    int64_t capture_time_ms,
++    const RTPVideoHeader* rtp_video_header,
++    uint32_t* transport_frame_id_out) {
++  rtcp_sender_.SetLastRtpTime(time_stamp, capture_time_ms);
++  // Make sure an RTCP report isn't queued behind a key frame.
++  if (rtcp_sender_.TimeToSendRTCPReport(kVideoFrameKey == frame_type)) {
++      rtcp_sender_.SendRTCP(GetFeedbackState(), kRtcpReport);
++  }
++  return rtp_sender_.SendOutgoingPackets(
++      payloads, payload_count, payload_type, frame_type, storage,
++      time_stamp, capture_time_ms, rtp_video_header, transport_frame_id_out);
++}
++
+ bool ModuleRtpRtcpImpl::TimeToSendPacket(uint32_t ssrc,
+                                          uint16_t sequence_number,
+                                          int64_t capture_time_ms,
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.h	2017-01-12 16:03:38.377230556 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_rtcp_impl.h	2017-01-12 16:03:38.374230570 +0300
+@@ -14,6 +14,7 @@
+ #include <set>
+ #include <utility>
+ #include <vector>
++#include <memory>
+ 
+ #include "webrtc/base/criticalsection.h"
+ #include "webrtc/base/gtest_prod_util.h"
+@@ -24,10 +25,14 @@
+ #include "webrtc/modules/rtp_rtcp/source/rtcp_receiver.h"
+ #include "webrtc/modules/rtp_rtcp/source/rtcp_sender.h"
+ #include "webrtc/modules/rtp_rtcp/source/rtp_sender.h"
++#include "webrtc/modules/rtp_rtcp/source/rtp_packet_to_send.h"
+ 
+ namespace webrtc {
+ 
+-class ModuleRtpRtcpImpl : public RtpRtcp, public RTCPReceiver::ModuleRtpRtcp {
++class RtpPacketToSend;
++struct PacketizedPayload;
++
++class ModuleRtpRtcpImpl final : public RtpRtcp, public RTCPReceiver::ModuleRtpRtcp {
+  public:
+   explicit ModuleRtpRtcpImpl(const RtpRtcp::Configuration& configuration);
+ 
+@@ -122,6 +127,39 @@ class ModuleRtpRtcpImpl : public RtpRtcp
+                         const RTPVideoHeader* rtp_video_header,
+                         uint32_t* transport_frame_id_out) override;
+ 
++  /*
++  *   Used to send video packets. The packets should be supplied in the form
++  *   of RTP payloads in RtpPacketToSend objects.
++  *
++  *   payloads        - points to an array of RTP payload descriptions
++  *   payload_count   - the number of RTP payloads to send
++  *   payload_type    - payload type of frame to send
++  *   frame_type      - type of frame to send
++  *   storage         - frame storage/retransmission policy
++  *   time_stamp      - timestamp of frame to send
++  *   capture_time_ms - frame capture timestamp
++  *   rtp_video_header - additional frame parameters
++  *   transport_frame_id_out - set to RTP timestamp.
++  *
++  *   return false on failure, true on success
++  */
++  bool SendOutgoingPackets(
++      PacketizedPayload* payloads,
++      size_t payload_count,
++      uint8_t payload_type,
++      FrameType frame_type,
++      StorageType storage,
++      uint32_t time_stamp,
++      int64_t capture_time_ms,
++      const RTPVideoHeader* rtp_video_header = nullptr,
++      uint32_t* transport_frame_id_out = nullptr);
++
++  // Create empty packet, fills ssrc, csrcs and reserve place for header
++  // extensions RtpSender updates before sending.
++  std::unique_ptr<RtpPacketToSend> AllocatePacketToSend() const {
++    return rtp_sender_.AllocatePacket();
++  }
++
+   bool TimeToSendPacket(uint32_t ssrc,
+                         uint16_t sequence_number,
+                         int64_t capture_time_ms,
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender.h	2017-01-12 16:03:38.377230556 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.h	2017-01-12 16:03:38.374230570 +0300
+@@ -41,6 +41,7 @@ class RtcEventLog;
+ class RtpPacketToSend;
+ class RTPSenderAudio;
+ class RTPSenderVideo;
++struct PacketizedPayload;
+ 
+ class RTPSender {
+  public:
+@@ -116,6 +117,17 @@ class RTPSender {
+                         const RTPVideoHeader* rtp_header,
+                         uint32_t* transport_frame_id_out);
+ 
++  // Used to send video packets.
++  bool SendOutgoingPackets(PacketizedPayload* payloads,
++                           size_t payload_count,
++                           uint8_t payload_type,
++                           FrameType frame_type,
++                           StorageType storage,
++                           uint32_t time_stamp,
++                           int64_t capture_time_ms,
++                           const RTPVideoHeader* rtp_header = nullptr,
++                           uint32_t* transport_frame_id_out = nullptr);
++
+   // RTP header extension
+   int32_t RegisterRtpHeaderExtension(RTPExtensionType type, uint8_t id);
+   bool IsRtpHeaderExtensionRegistered(RTPExtensionType type);
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc	2017-01-12 16:03:38.377230556 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc	2017-01-12 16:03:38.375230565 +0300
+@@ -458,6 +458,70 @@ bool RTPSender::SendOutgoingData(FrameTy
+   return result;
+ }
+ 
++bool RTPSender::SendOutgoingPackets(PacketizedPayload* payloads,
++                                    size_t payload_count,
++                                    uint8_t payload_type,
++                                    FrameType frame_type,
++                                    StorageType storage,
++                                    uint32_t capture_timestamp,
++                                    int64_t capture_time_ms,
++                                    const RTPVideoHeader* rtp_header,
++                                    uint32_t* transport_frame_id_out) {
++  if (audio_configured_)
++    return false;
++
++  uint32_t ssrc;
++  uint32_t rtp_timestamp;
++  uint16_t sequence_number;
++  {
++    // Drop this packet if we're not sending media packets.
++    rtc::CritScope lock(&send_critsect_);
++    ssrc = ssrc_;
++    sequence_number = sequence_number_;
++    rtp_timestamp = timestamp_offset_ + capture_timestamp;
++    if (transport_frame_id_out)
++      *transport_frame_id_out = rtp_timestamp;
++    if (!sending_media_)
++      return true;
++  }
++  RtpVideoCodecTypes video_type = kRtpVideoGeneric;
++  if (CheckPayloadType(payload_type, &video_type) != 0) {
++    LOG(LS_ERROR) << "Don't send data with unknown payload type: "
++      << static_cast< unsigned int >(payload_type) << ".";
++    return false;
++  }
++
++  TRACE_EVENT_ASYNC_STEP1("webrtc", "Video", capture_time_ms,
++                          "Send", "type", FrameTypeToString(frame_type));
++  assert(frame_type != kAudioFrameSpeech && frame_type != kAudioFrameCN);
++
++  if (frame_type == kEmptyFrame)
++    return true;
++
++  if (rtp_header) {
++    playout_delay_oracle_.UpdateRequest(ssrc, rtp_header->playout_delay,
++                                        sequence_number);
++  }
++
++  bool result =
++      video_->SendVideoPackets(payloads, payload_count,
++                               payload_type, frame_type, storage,
++                               rtp_timestamp, capture_time_ms, rtp_header);
++
++  rtc::CritScope cs(&statistics_crit_);
++  // Note: This is currently only counting for video.
++  if (frame_type == kVideoFrameKey) {
++    ++frame_counts_.key_frames;
++  } else if (frame_type == kVideoFrameDelta) {
++    ++frame_counts_.delta_frames;
++  }
++  if (frame_count_observer_) {
++    frame_count_observer_->FrameCountUpdated(frame_counts_, ssrc);
++  }
++
++  return result;
++}
++
+ size_t RTPSender::TrySendRedundantPayloads(size_t bytes_to_send,
+                                            int probe_cluster_id) {
+   {
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.cc	2017-01-12 16:03:38.377230556 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.cc	2017-01-12 16:03:38.375230565 +0300
+@@ -27,6 +27,7 @@
+ #include "webrtc/modules/rtp_rtcp/source/rtp_format_vp9.h"
+ #include "webrtc/modules/rtp_rtcp/source/rtp_header_extensions.h"
+ #include "webrtc/modules/rtp_rtcp/source/rtp_packet_to_send.h"
++#include "webrtc/modules/rtp_rtcp/source/packetized_payload.h"
+ 
+ namespace webrtc {
+ 
+@@ -399,6 +400,102 @@ bool RTPSenderVideo::SendVideo(RtpVideoC
+   }
+ 
+   TRACE_EVENT_ASYNC_END1("webrtc", "Video", capture_time_ms, "timestamp",
++                         rtp_timestamp);
++  return true;
++}
++
++bool RTPSenderVideo::SendVideoPackets(PacketizedPayload* payloads,
++                                      size_t payload_count,
++                                      uint8_t payload_type,
++                                      FrameType frame_type,
++                                      StorageType storage,
++                                      uint32_t rtp_timestamp,
++                                      int64_t capture_time_ms,
++                                      const RTPVideoHeader* video_header) {
++  if (payload_count == 0) {
++    return false;
++  }
++
++  size_t fec_packet_overhead;
++  VideoRotation current_rotation;
++  bool red_enabled, cvo_enabled = false;
++  {
++    rtc::CritScope cs(&crit_);
++    // According to
++    // http://www.etsi.org/deliver/etsi_ts/126100_126199/126114/12.07.00_60/
++    // ts_126114v120700p.pdf Section 7.4.5:
++    // The MTSI client shall add the payload bytes as defined in this clause
++    // onto the last RTP packet in each group of packets which make up a key
++    // frame (I-frame or IDR frame in H.264 (AVC), or an IRAP picture in H.265
++    // (HEVC)). The MTSI client may also add the payload bytes onto the last RTP
++    // packet in each group of packets which make up another type of frame
++    // (e.g. a P-Frame) only if the current value is different from the previous
++    // value sent.
++    if (video_header) {
++      // Set rotation when key frame or when changed (to follow standard).
++      // Or when different from 0 (to follow current receiver implementation).
++      current_rotation = video_header->rotation;
++      cvo_enabled = (frame_type == kVideoFrameKey || current_rotation != last_rotation_ ||
++          current_rotation != kVideoRotation_0);
++      last_rotation_ = current_rotation;
++    }
++
++    // FEC settings.
++    const FecProtectionParams& fec_params =
++        frame_type == kVideoFrameKey ? key_fec_params_ : delta_fec_params_;
++    if (flexfec_enabled())
++      flexfec_sender_->SetFecParameters(fec_params);
++    if (ulpfec_enabled())
++      ulpfec_generator_.SetFecParameters(fec_params);
++
++    fec_packet_overhead = CalculateFecPacketOverhead();
++    red_enabled = this->red_enabled();
++  }
++
++  const size_t packet_capacity = rtp_sender_->MaxPayloadLength() -
++                                 fec_packet_overhead -
++                                 (rtp_sender_->RtxStatus() ? kRtxHeaderSize : 0);
++  for (size_t i = 0; i < payload_count; ++i) {
++    if (payloads[i].packet->size() > packet_capacity) {
++      LOG(LS_WARNING) << "Failed to send packets, the packet size ("
++                      << payloads[i].packet->size() << " bytes) exceeds the maximum allowed ("
++                      << packet_capacity << " bytes)";
++      return false;
++    }
++  }
++
++  first_frame_sent_.set();
++
++  for (size_t i = 0; i < payload_count; ++i) {
++    auto& packet = payloads[i].packet;
++    packet->SetPayloadType(payload_type);
++    packet->SetTimestamp(rtp_timestamp);
++    packet->set_capture_time_ms(capture_time_ms);
++    if (cvo_enabled) {
++      packet->SetExtension<VideoOrientation>(current_rotation);
++    }
++
++    const bool last = (i == (payload_count - 1));
++    packet->SetMarker(last);
++
++    if (!rtp_sender_->AssignSequenceNumber(packet.get()))
++      return false;
++
++    const bool protect_packet =
++        (payloads[i].protection == kProtectedPacket);
++    if (flexfec_enabled()) {
++      // TODO(brandtr): Remove the FlexFEC code path when FlexfecSender
++      // is wired up to PacedSender instead.
++      SendVideoPacketWithFlexfec(std::move(packet), storage, protect_packet);
++    } else if (red_enabled) {
++      SendVideoPacketAsRedMaybeWithUlpfec(std::move(packet), storage,
++                                          protect_packet);
++    } else {
++      SendVideoPacket(std::move(packet), storage);
++    }
++  }
++
++  TRACE_EVENT_ASYNC_END1("webrtc", "Video", capture_time_ms, "timestamp",
+                          rtp_timestamp);
+   return true;
+ }
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.h	2017-01-12 16:03:38.377230556 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender_video.h	2017-01-12 16:03:38.375230565 +0300
+@@ -33,6 +33,7 @@
+ 
+ namespace webrtc {
+ class RtpPacketToSend;
++struct PacketizedPayload;
+ 
+ class RTPSenderVideo {
+  public:
+@@ -62,6 +63,15 @@ class RTPSenderVideo {
+                  const RTPFragmentationHeader* fragmentation,
+                  const RTPVideoHeader* video_header);
+ 
++  bool SendVideoPackets(PacketizedPayload* payloads,
++                        size_t payload_count,
++                        uint8_t payload_type,
++                        FrameType frame_type,
++                        StorageType storage,
++                        uint32_t capture_timestamp,
++                        int64_t capture_time_ms,
++                        const RTPVideoHeader* video_header);
++
+   void SetVideoCodecType(RtpVideoCodecTypes type);
+ 
+   // ULPFEC.
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/packetized_payload.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/packetized_payload.h	2017-01-12 16:03:38.375230565 +0300
+@@ -0,0 +1,27 @@
++#ifndef WEBRTC_MODULES_RTP_RTCP_SOURCE_PACKETIZED_PAYLOAD_H_
++#define WEBRTC_MODULES_RTP_RTCP_SOURCE_PACKETIZED_PAYLOAD_H_
++
++#include <memory>
++#include <utility>
++
++#include "webrtc/modules/rtp_rtcp/include/rtp_rtcp_defines.h"
++#include "webrtc/modules/rtp_rtcp/source/rtp_packet_to_send.h"
++
++namespace webrtc {
++
++struct PacketizedPayload {
++  std::unique_ptr< RtpPacketToSend > packet;
++  ProtectionType protection;
++
++  PacketizedPayload() noexcept : packet(), protection(kUnprotectedPacket) {}
++  PacketizedPayload(PacketizedPayload&& that) noexcept : packet(std::move(that.packet)), protection(that.protection) {}
++  PacketizedPayload& operator= (PacketizedPayload&& that) noexcept {
++    packet = std::move(that.packet);
++    protection = that.protection;
++    return *this;
++  }
++};
++
++} // namespace webrtc
++
++#endif // WEBRTC_MODULES_RTP_RTCP_SOURCE_PACKETIZED_PAYLOAD_H_

@@ -1,0 +1,157 @@
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/forward_error_correction.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/forward_error_correction.cc	2017-01-12 16:03:23.513298770 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/forward_error_correction.cc	2017-01-12 16:03:23.511298780 +0300
+@@ -11,6 +11,7 @@
+ #include "webrtc/modules/rtp_rtcp/source/forward_error_correction.h"
+ 
+ #include <string.h>
++#include <stdint.h>
+ 
+ #include <algorithm>
+ #include <iterator>
+@@ -24,6 +25,15 @@
+ #include "webrtc/modules/rtp_rtcp/source/forward_error_correction_internal.h"
+ #include "webrtc/modules/rtp_rtcp/source/ulpfec_header_reader_writer.h"
+ 
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)) && defined(__SSE2__)
++#include <immintrin.h>
++#if !defined(__SSE3__)
++#define MM_LDDQU_SI128(x) _mm_loadu_si128(x)
++#else
++#define MM_LDDQU_SI128(x) _mm_lddqu_si128(x)
++#endif
++#endif
++
+ namespace webrtc {
+ 
+ namespace {
+@@ -34,6 +44,84 @@ constexpr size_t kTransportOverhead = 28
+ ForwardErrorCorrection::Packet::Packet() : length(0), data(), ref_count_(0) {}
+ ForwardErrorCorrection::Packet::~Packet() = default;
+ 
++namespace {
++
++#if defined(__GNUC__)
++#define WEBRTC_FORCE_INLINE inline __attribute__((always_inline))
++#else
++#define WEBRTC_FORCE_INLINE inline
++#endif
++
++template< typename T >
++WEBRTC_FORCE_INLINE void xor_int_buffer(const uint8_t* src, uint8_t* dst) {
++#if defined(__GNUC__)
++  T src_val;
++  __builtin_memcpy(&src_val, src, sizeof(src_val));
++  T dst_val;
++  __builtin_memcpy(&dst_val, dst, sizeof(dst_val));
++  dst_val ^= src_val;
++  __builtin_memcpy(dst, &dst_val, sizeof(dst_val));
++#else
++  for (size_t i = 0; i < sizeof(T); ++i)
++    dst[i] ^= src[i];
++#endif
++}
++
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)) && defined(__SSE2__)
++// Disable auto-vectorization for xor_bytes_nonvec since xor_bytes is already vectorized
++__attribute__((optimize("no-tree-vectorize")))
++#endif
++WEBRTC_FORCE_INLINE void xor_bytes_nonvec(const uint8_t* src, uint8_t* dst, size_t size) {
++  size_t i = 0;
++
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
++  for (size_t i_end = size & ~((size_t)3u); i < i_end; i += 4u)
++    *reinterpret_cast< uint32_t* >(dst + i) ^= *reinterpret_cast< const uint32_t* >(src + i);
++#endif
++
++  for (; i < size; ++i)
++    dst[i] ^= src[i];
++}
++
++WEBRTC_FORCE_INLINE void xor_bytes(const uint8_t* src, uint8_t* dst, size_t size) {
++  size_t i = 0;
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)) && defined(__SSE2__)
++  {
++    size_t i_vec_end = size & ~((size_t)15u);
++    if (i_vec_end > 0)
++    {
++      uintptr_t misalignment = ((uintptr_t)dst) & 15u;
++      if (misalignment) {
++        xor_bytes_nonvec(src, dst, 16u - misalignment);
++        i += 16u - misalignment;
++        i_vec_end = (size - i) & ~((size_t)15u);
++      }
++      for (size_t n = i_vec_end & ~((size_t)31u); i < n; i += 32u) {
++        __m128i mm_dst1 = _mm_load_si128(reinterpret_cast< const __m128i* >(&dst[i]));
++        __m128i mm_dst2 = _mm_load_si128(reinterpret_cast< const __m128i* >(&dst[i + 16u]));
++        __m128i mm_src1 = MM_LDDQU_SI128(reinterpret_cast< const __m128i* >(&src[i]));
++        __m128i mm_src2 = MM_LDDQU_SI128(reinterpret_cast< const __m128i* >(&src[i + 16u]));
++        mm_dst1 = _mm_xor_si128(mm_dst1, mm_src1);
++        mm_dst2 = _mm_xor_si128(mm_dst2, mm_src2);
++        _mm_store_si128(reinterpret_cast< __m128i* >(&dst[i]), mm_dst1);
++        _mm_store_si128(reinterpret_cast< __m128i* >(&dst[i + 16u]), mm_dst2);
++      }
++      if (i < i_vec_end) {
++        __m128i mm_dst = _mm_load_si128(reinterpret_cast< const __m128i* >(&dst[i]));
++        __m128i mm_src = MM_LDDQU_SI128(reinterpret_cast< const __m128i* >(&src[i]));
++        mm_dst = _mm_xor_si128(mm_dst, mm_src);
++        _mm_store_si128(reinterpret_cast< __m128i* >(&dst[i]), mm_dst);
++        i += 16u;
++      }
++    }
++  }
++#endif // defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)) && defined(__SSE2__)
++
++  xor_bytes_nonvec(src + i, dst + i, size - i);
++}
++
++} // namespace
++
+ int32_t ForwardErrorCorrection::Packet::AddRef() {
+   return ++ref_count_;
+ }
+@@ -552,27 +640,24 @@ bool ForwardErrorCorrection::FinishPacke
+   return true;
+ }
+ 
++inline
+ void ForwardErrorCorrection::XorHeaders(const Packet& src, Packet* dst) {
+   // XOR the first 2 bytes of the header: V, P, X, CC, M, PT fields.
+-  dst->data[0] ^= src.data[0];
+-  dst->data[1] ^= src.data[1];
++  xor_int_buffer< uint16_t >(src.data, dst->data);
+ 
+   // XOR the length recovery field.
+   uint8_t src_payload_length_network_order[2];
+   ByteWriter<uint16_t>::WriteBigEndian(src_payload_length_network_order,
+                                        src.length - kRtpHeaderSize);
+-  dst->data[2] ^= src_payload_length_network_order[0];
+-  dst->data[3] ^= src_payload_length_network_order[1];
++  xor_int_buffer< uint16_t >(src_payload_length_network_order, dst->data + 2);
+ 
+   // XOR the 5th to 8th bytes of the header: the timestamp field.
+-  dst->data[4] ^= src.data[4];
+-  dst->data[5] ^= src.data[5];
+-  dst->data[6] ^= src.data[6];
+-  dst->data[7] ^= src.data[7];
++  xor_int_buffer< uint32_t >(src.data + 4, dst->data + 4);
+ 
+   // Skip the 9th to 12th bytes of the header.
+ }
+ 
++inline
+ void ForwardErrorCorrection::XorPayloads(const Packet& src,
+                                          size_t payload_length,
+                                          size_t dst_offset,
+@@ -580,9 +665,7 @@ void ForwardErrorCorrection::XorPayloads
+   // XOR the payload.
+   RTC_DCHECK_LE(kRtpHeaderSize + payload_length, sizeof(src.data));
+   RTC_DCHECK_LE(dst_offset + payload_length, sizeof(dst->data));
+-  for (size_t i = 0; i < payload_length; ++i) {
+-    dst->data[dst_offset + i] ^= src.data[kRtpHeaderSize + i];
+-  }
++  xor_bytes(src.data + kRtpHeaderSize, dst->data + dst_offset, payload_length);
+ }
+ 
+ bool ForwardErrorCorrection::RecoverPacket(const ReceivedFecPacket& fec_packet,

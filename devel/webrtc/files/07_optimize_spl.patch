@@ -1,0 +1,116 @@
+Index: webrtc/src/webrtc/common_audio/signal_processing/include/spl_inl.h
+===================================================================
+--- webrtc.orig/src/webrtc/common_audio/signal_processing/include/spl_inl.h	2017-01-12 16:02:53.868435701 +0300
++++ webrtc/src/webrtc/common_audio/signal_processing/include/spl_inl.h	2017-01-12 16:02:53.866435711 +0300
+@@ -73,17 +73,26 @@ static __inline int WebRtcSpl_CountLeadi
+ 
+ #if !defined(MIPS_DSP_R1_LE)
+ static __inline int16_t WebRtcSpl_SatW32ToW16(int32_t value32) {
+-  int16_t out16 = (int16_t) value32;
+-
+-  if (value32 > 32767)
+-    out16 = 32767;
+-  else if (value32 < -32768)
+-    out16 = -32768;
+-
+-  return out16;
++  return (int16_t)(value32 > 32767 ? 32767 : (value32 < -32768 ? -32768 : value32));
+ }
+ 
+ static __inline int32_t WebRtcSpl_AddSatW32(int32_t a, int32_t b) {
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
++  __asm__
++  (
++    "addl %1, %%eax\n\t"
++    "jno 1f\n\t"
++    "setns %%al\n\t"
++    "movzx %%al, %%eax\n\t"
++    "add $0x7fffffff, %%eax\n\t"
++    "1:\n\t"
++    : "+a" (a)
++    : "g" (b)
++    : "cc"
++  );
++
++  return a;
++#else
+   // Do the addition in unsigned numbers, since signed overflow is undefined
+   // behavior.
+   const int32_t sum = (int32_t)((uint32_t)a + (uint32_t)b);
+@@ -95,9 +104,26 @@ static __inline int32_t WebRtcSpl_AddSat
+     return sum < 0 ? INT32_MAX : INT32_MIN;
+   }
+   return sum;
++#endif
+ }
+ 
+ static __inline int32_t WebRtcSpl_SubSatW32(int32_t a, int32_t b) {
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
++  __asm__
++  (
++    "subl %1, %%eax\n\t"
++    "jno 1f\n\t"
++    "setns %%al\n\t"
++    "movzx %%al, %%eax\n\t"
++    "add $0x7fffffff, %%eax\n\t"
++    "1:\n\t"
++    : "+a" (a)
++    : "g" (b)
++    : "cc"
++  );
++
++  return a;
++#else
+   // Do the subtraction in unsigned numbers, since signed overflow is undefined
+   // behavior.
+   const int32_t diff = (int32_t)((uint32_t)a - (uint32_t)b);
+@@ -109,14 +135,49 @@ static __inline int32_t WebRtcSpl_SubSat
+     return diff < 0 ? INT32_MAX : INT32_MIN;
+   }
+   return diff;
++#endif
+ }
+ 
+ static __inline int16_t WebRtcSpl_AddSatW16(int16_t a, int16_t b) {
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
++  __asm__
++  (
++    "addw %1, %%ax\n\t"
++    "jno 1f\n\t"
++    "setns %%al\n\t"
++    "movzx %%al, %%eax\n\t"
++    "add $0x7fff, %%ax\n\t"
++    "1:\n\t"
++    : "+a" (a)
++    : "g" (b)
++    : "cc"
++  );
++
++  return a;
++#else
+   return WebRtcSpl_SatW32ToW16((int32_t) a + (int32_t) b);
++#endif
+ }
+ 
+ static __inline int16_t WebRtcSpl_SubSatW16(int16_t var1, int16_t var2) {
++#if defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__))
++  __asm__
++  (
++    "subw %1, %%ax\n\t"
++    "jno 1f\n\t"
++    "setns %%al\n\t"
++    "movzx %%al, %%eax\n\t"
++    "add $0x7fff, %%ax\n\t"
++    "1:\n\t"
++    : "+a" (var1)
++    : "g" (var2)
++    : "cc"
++  );
++
++  return var1;
++#else
+   return WebRtcSpl_SatW32ToW16((int32_t) var1 - (int32_t) var2);
++#endif
+ }
+ #endif  // #if !defined(MIPS_DSP_R1_LE)
+ 

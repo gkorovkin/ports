@@ -1,0 +1,13 @@
+Index: webrtc/src/webrtc/modules/desktop_capture/screen_capturer_x11.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/desktop_capture/screen_capturer_x11.cc	2017-01-12 16:04:05.114108564 +0300
++++ webrtc/src/webrtc/modules/desktop_capture/screen_capturer_x11.cc	2017-01-12 16:04:05.112108573 +0300
+@@ -412,7 +412,7 @@ std::unique_ptr<DesktopCapturer> Desktop
+     return nullptr;
+   }
+ 
+-  return capturer;
++  return std::move(capturer);
+ }
+ 
+ }  // namespace webrtc

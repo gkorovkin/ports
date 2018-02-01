@@ -1,0 +1,22 @@
+Index: x265-2.3+0-3037c1448549/source/encoder/entropy.cpp
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/encoder/entropy.cpp	2017-02-15 13:31:34.091910426 +0300
++++ x265-2.3+0-3037c1448549/source/encoder/entropy.cpp	2017-02-15 13:31:34.090910431 +0300
+@@ -2629,7 +2629,9 @@ const uint8_t g_nextState[128][2] =
+ }
+ 
+ // [8 24] --> [stateMPS BitCost], [stateLPS BitCost]
+-extern "C" const uint32_t PFX(entropyStateBits)[128] =
++extern "C" {
++#pragma GCC visibility push(hidden)
++const uint32_t PFX(entropyStateBits)[128] =
+ {
+     // Corrected table, most notably for last state
+     0x02007B23, 0x000085F9, 0x040074A0, 0x00008CBC, 0x06006EE4, 0x02009354, 0x080067F4, 0x04009C1B,
+@@ -2649,4 +2651,5 @@ extern "C" const uint32_t PFX(entropySta
+     0x7200050C, 0x48029BAB, 0x740004C1, 0x4802A674, 0x760004A7, 0x4A02AA5E, 0x7800046F, 0x4A02B32F,
+     0x7A00041F, 0x4A02C0AD, 0x7C0003E7, 0x4C02CA8D, 0x7C0003BA, 0x4C02D323, 0x7E00010C, 0x7E03BFBB,
+ };
+-
++#pragma GCC visibility pop
++}

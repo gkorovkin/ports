@@ -1,27 +1,28 @@
 # -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
 # $Id$
 
-PortSystem          1.0
+PortSystem			1.0
 
-name                ptlib
-version             2.12.8
-categories          devel
-platforms           darwin
-license             BSD
-maintainers         gkorovin
-description         ptlib
-long_description    Portable Tool Library
+name				ptlib
+version				2.10.9
+categories			devel
+platforms			darwin
+license				BSD
+maintainers			gkorovin
+description			ptlib
+long_description	PTLib 2.10.9 fork for GNU Gatekeeper and H323Plus
 
-#fetching fixed version
-#634deba0bc879e00006a7ae4f297f671534700c6
+patch.pre_args		-p1
+patchfiles			01_fix_sched_yield.patch \
+                    02_install_version.patch
 
-master_sites		http://www.h323plus.org/source/download
-distfiles			${name}-${version}.tar.bz2
+fetch.type			git
+git.url				https://github.com/willamowius/ptlib
+git.branch			3ce47a2fe34b87318832cade60af7e2f7bec72f3
 
-patch.pre_args      -p1
-patchfiles			patch-svcproc.diff
-
-configure.args      --disable-audio --disable-pluginmgr --disable-plugins --disable-video
-
-checksums           rmd160  0e8d34cc70989381cab1e5eefef797ac1a6132bd \
-	                sha256  dc14467ce8fc629d09aa1e373c2cc871002d08b3afa1a7586323b6806309a369
+post-destroot {
+    reinplace "s|include \$\(PTLIBDIR\)\/make|include \$\(PTLIBDIR\)\/share\/ptlib\/make|g" \
+        ${destroot}${prefix}/share/ptlib/make/ptlib.mak \
+        ${destroot}${prefix}/share/ptlib/make/plugins.mak \
+        ${destroot}${prefix}/share/ptlib/make/unix.mak
+}

@@ -1,0 +1,32 @@
+Index: x265-2.3+0-3037c1448549/source/CMakeLists.txt
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/CMakeLists.txt	2017-02-15 13:31:27.684947423 +0300
++++ x265-2.3+0-3037c1448549/source/CMakeLists.txt	2017-02-15 13:31:27.683947429 +0300
+@@ -187,7 +187,7 @@ endif()
+ if(GCC)
+     add_definitions(-Wall -Wextra -Wshadow)
+     add_definitions(-D__STDC_LIMIT_MACROS=1)
+-    add_definitions(-std=gnu++98)
++    add_definitions(-std=gnu++11)
+     if(ENABLE_PIC)
+          add_definitions(-fPIC)
+     endif(ENABLE_PIC)
+@@ -343,6 +343,18 @@ if(EXTRA_LIB)
+ endif(EXTRA_LIB)
+ mark_as_advanced(EXTRA_LIB EXTRA_LINK_FLAGS)
+ 
++set(EXTRA_C_FLAGS "" CACHE STRING "Extra C flags")
++if(EXTRA_C_FLAGS)
++    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_C_FLAGS}")
++endif()
++mark_as_advanced(EXTRA_C_FLAGS)
++
++set(EXTRA_CXX_FLAGS "" CACHE STRING "Extra C++ flags")
++if(EXTRA_CXX_FLAGS)
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${EXTRA_CXX_FLAGS}")
++endif()
++mark_as_advanced(EXTRA_CXX_FLAGS)
++
+ if(X64)
+     # NOTE: We only officially support high-bit-depth compiles of x265
+     # on 64bit architectures. Main10 plus large resolution plus slow

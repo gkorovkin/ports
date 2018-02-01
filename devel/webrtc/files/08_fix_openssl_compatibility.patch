@@ -1,0 +1,53 @@
+Index: webrtc/src/webrtc/base/openssladapter.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/openssladapter.cc	2017-01-12 16:02:57.000421177 +0300
++++ webrtc/src/webrtc/base/openssladapter.cc	2017-01-12 16:02:56.998421187 +0300
+@@ -92,7 +92,7 @@ static BIO_METHOD methods_socket = {
+ static BIO_METHOD* BIO_s_socket2() { return(&methods_socket); }
+ 
+ static BIO* BIO_new_socket(rtc::AsyncSocket* socket) {
+-  BIO* ret = BIO_new(BIO_s_socket2());
++  BIO* ret = BIO_new(const_cast< BIO_METHOD* >(BIO_s_socket2()));
+   if (ret == NULL) {
+           return NULL;
+   }
+Index: webrtc/src/webrtc/base/opensslstreamadapter.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/opensslstreamadapter.cc	2017-01-12 16:02:57.000421177 +0300
++++ webrtc/src/webrtc/base/opensslstreamadapter.cc	2017-01-12 16:02:56.998421187 +0300
+@@ -11,6 +11,7 @@
+ #if HAVE_OPENSSL_SSL_H
+ 
+ #include "webrtc/base/opensslstreamadapter.h"
++#include "webrtc/base/openssl.h"
+ 
+ #include <openssl/bio.h>
+ #include <openssl/crypto.h>
+@@ -30,7 +31,6 @@
+ #include "webrtc/base/logging.h"
+ #include "webrtc/base/safe_conversions.h"
+ #include "webrtc/base/stream.h"
+-#include "webrtc/base/openssl.h"
+ #include "webrtc/base/openssladapter.h"
+ #include "webrtc/base/openssldigest.h"
+ #include "webrtc/base/opensslidentity.h"
+@@ -189,7 +189,7 @@ static BIO_METHOD methods_stream = {
+ static BIO_METHOD* BIO_s_stream() { return(&methods_stream); }
+ 
+ static BIO* BIO_new_stream(StreamInterface* stream) {
+-  BIO* ret = BIO_new(BIO_s_stream());
++  BIO* ret = BIO_new(const_cast< BIO_METHOD* >(BIO_s_stream()));
+   if (ret == NULL)
+     return NULL;
+   ret->ptr = stream;
+@@ -405,8 +405,10 @@ int OpenSSLStreamAdapter::GetSslVersion(
+   if (ssl_mode_ == SSL_MODE_DTLS) {
+     if (ssl_version == DTLS1_VERSION)
+       return SSL_PROTOCOL_DTLS_10;
++#if defined(DTLS1_2_VERSION)
+     else if (ssl_version == DTLS1_2_VERSION)
+       return SSL_PROTOCOL_DTLS_12;
++#endif
+   } else {
+     if (ssl_version == TLS1_VERSION)
+       return SSL_PROTOCOL_TLS_10;

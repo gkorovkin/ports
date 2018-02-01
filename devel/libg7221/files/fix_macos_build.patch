@@ -1,0 +1,40 @@
+diff --git a/autogen.sh b/autogen.sh
+index 98fb7e4..b5fced3 100755
+--- a/autogen.sh
++++ b/autogen.sh
+@@ -17,6 +17,10 @@
+ # along with this program; if not, write to the Free Software
+ # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ 
++if [ -z "$UNAME"]; then
++	UNAME=`uname`
++fi
++
+ if [ "x$UNAME" = "xFreeBSD" ]; then
+     echo ""
+     echo ""
+@@ -113,7 +117,13 @@ AUTOHEADER=autoheader259
+ AUTOMAKE=automake19
+ AUTOCONF=autoconf259
+ else
+-version_compare libtoolize 1 5 16 || exit 1
++	if [ "$UNAME" = "Darwin" ]; then
++		echo "Accepting any version of libtool on macos"
++		version_compare glibtoolize 1 5 16 || exit 1
++	else
++		version_compare libtoolize 1 5 16 || exit 1
++	fi
++	   
+ version_compare automake 1 9 5 || exit 1
+ version_compare autoconf 2 59 || exit 1
+ ACLOCAL=aclocal
+@@ -122,7 +132,8 @@ AUTOMAKE=automake
+ AUTOCONF=autoconf
+ fi
+ 
+-libtoolize --copy --force --ltdl
++
++glibtoolize --copy --force --ltdl
+ #NetBSD seems to need this file writable
+ chmod u+w libltdl/configure
+ 

@@ -1,0 +1,116 @@
+This patch adds support for known (pre-configured) reflexive addresses for
+particular network interfaces. This may be useful in environments with
+static port forwarding and without a STUN server.
+
+Note that the surrogate candidates are server-reflexive because the rest of
+libwebrtc does not support peer-reflexive candidates.
+
+Index: webrtc/src/webrtc/base/network.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/network.cc	2017-01-12 16:03:27.821278970 +0300
++++ webrtc/src/webrtc/base/network.cc	2017-01-12 16:03:27.816278993 +0300
+@@ -480,6 +480,10 @@ void BasicNetworkManager::ConvertIfAddrs
+       network->set_scope_id(scope_id);
+       network->AddIP(ip);
+       network->set_ignored(IsIgnoredNetwork(*network));
++      KnownReflexiveAddresses::const_iterator it_known_reflexive_addrs =
++        known_reflexive_addresses_.find(cursor->ifa_name);
++      if (it_known_reflexive_addrs != known_reflexive_addresses_.end())
++        network->set_known_reflexive_addresses(it_known_reflexive_addrs->second);
+       if (include_ignored || !network->ignored()) {
+         current_networks[key] = network.get();
+         networks->push_back(network.release());
+@@ -641,6 +645,10 @@ bool BasicNetworkManager::CreateNetworks
+           network->AddIP(ip);
+           bool ignored = IsIgnoredNetwork(*network);
+           network->set_ignored(ignored);
++          KnownReflexiveAddresses::const_iterator it_known_reflexive_addrs =
++            known_reflexive_addresses_.find(name);
++          if (it_known_reflexive_addrs != known_reflexive_addresses_.end())
++            network->set_known_reflexive_addresses(it_known_reflexive_addrs->second);
+           if (include_ignored || !network->ignored()) {
+             current_networks[key] = network.get();
+             networks->push_back(network.release());
+Index: webrtc/src/webrtc/base/network.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/network.h	2017-01-12 16:03:27.821278970 +0300
++++ webrtc/src/webrtc/base/network.h	2017-01-12 16:03:27.816278993 +0300
+@@ -61,6 +61,8 @@ class DefaultLocalAddressProvider {
+   virtual bool GetDefaultLocalAddress(int family, IPAddress* ipaddr) const = 0;
+ };
+ 
++typedef std::vector< IPAddress > IPAddresses;
++
+ // Generic network manager interface. It provides list of local
+ // networks.
+ //
+@@ -204,6 +206,10 @@ class BasicNetworkManager : public Netwo
+                             public MessageHandler,
+                             public sigslot::has_slots<> {
+  public:
++  // A mapping of interface names to the list of known reflexive addresses for these interfaces
++  typedef std::map< std::string, IPAddresses > KnownReflexiveAddresses;
++
++ public:
+   BasicNetworkManager();
+   ~BasicNetworkManager() override;
+ 
+@@ -229,6 +235,10 @@ class BasicNetworkManager : public Netwo
+   }
+ #endif
+ 
++  void set_known_reflexive_addresses(KnownReflexiveAddresses const& addresses) {
++    known_reflexive_addresses_ = addresses;
++  }
++
+  protected:
+ #if defined(WEBRTC_POSIX)
+   // Separated from CreateNetworks for tests.
+@@ -271,6 +281,7 @@ class BasicNetworkManager : public Netwo
+   bool sent_first_update_;
+   int start_count_;
+   std::vector<std::string> network_ignore_list_;
++  KnownReflexiveAddresses known_reflexive_addresses_;
+   bool ignore_non_default_routes_;
+   std::unique_ptr<NetworkMonitorInterface> network_monitor_;
+ };
+@@ -402,6 +413,9 @@ class Network {
+     }
+   }
+ 
++  IPAddresses const& known_reflexive_addresses() const { return known_reflexive_addresses_; }
++  void set_known_reflexive_addresses(IPAddresses const& addresses) { known_reflexive_addresses_ = addresses; }
++
+   // Debugging description of this network
+   std::string ToString() const;
+ 
+@@ -413,6 +427,7 @@ class Network {
+   int prefix_length_;
+   std::string key_;
+   std::vector<InterfaceAddress> ips_;
++  IPAddresses known_reflexive_addresses_;
+   int scope_id_;
+   bool ignored_;
+   AdapterType type_;
+Index: webrtc/src/webrtc/p2p/base/stunport.cc
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/base/stunport.cc	2017-01-12 16:03:27.821278970 +0300
++++ webrtc/src/webrtc/p2p/base/stunport.cc	2017-01-12 16:03:27.819278979 +0300
+@@ -317,6 +317,17 @@ void UDPPort::OnLocalAddressReady(rtc::A
+ 
+   AddAddress(addr, addr, rtc::SocketAddress(), UDP_PROTOCOL_NAME, "", "",
+              LOCAL_PORT_TYPE, ICE_TYPE_PREFERENCE_HOST, 0, false);
++
++  if (!this->Network()->known_reflexive_addresses().empty()) {
++    std::string empty_string;
++    for (rtc::IPAddress const& reflexive_ip : this->Network()->known_reflexive_addresses()) {
++      AddAddress(rtc::SocketAddress(reflexive_ip, addr.port()),
++                 addr, addr,
++                 UDP_PROTOCOL_NAME, empty_string, empty_string, STUN_PORT_TYPE,
++                 ICE_TYPE_PREFERENCE_SRFLX, 0, false);
++    }
++  }
++
+   MaybePrepareStunCandidate();
+ }
+ 

@@ -1,0 +1,28 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+# $Id$
+
+PortSystem          1.0
+
+name                libg7221
+version             0.2.0
+categories          devel
+platforms           darwin
+license             BSD
+maintainers         gkorovin
+description         libg7221
+long_description    G722.1 Audio codec
+
+#fetching fixed version
+fetch.type			git
+git.url				https://freeswitch.org/stash/scm/sd/libg7221.git
+git.branch			dbfc29d4806ecdace50379a2f4d68a992a6fec34
+
+depends_lib         port:libtool
+
+patch.pre_args		-p1
+patchfiles          fix_macos_build.patch
+
+use_autoreconf      yes
+autoreconf.cmd      ./autogen.sh
+
+

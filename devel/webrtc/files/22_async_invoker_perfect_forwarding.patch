@@ -1,0 +1,207 @@
+Index: webrtc/src/webrtc/base/asyncinvoker-inl.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/asyncinvoker-inl.h	2017-01-12 16:03:41.417216640 +0300
++++ webrtc/src/webrtc/base/asyncinvoker-inl.h	2017-01-12 16:03:41.415216649 +0300
+@@ -11,6 +11,8 @@
+ #ifndef WEBRTC_BASE_ASYNCINVOKER_INL_H_
+ #define WEBRTC_BASE_ASYNCINVOKER_INL_H_
+ 
++#include <utility>
++#include <type_traits>
+ #include "webrtc/base/bind.h"
+ #include "webrtc/base/callback.h"
+ #include "webrtc/base/criticalsection.h"
+@@ -40,8 +42,9 @@ class AsyncClosure : public RefCountInte
+ template <class FunctorT>
+ class FireAndForgetAsyncClosure : public AsyncClosure {
+  public:
+-  explicit FireAndForgetAsyncClosure(const FunctorT& functor)
+-      : functor_(functor) {}
++  template< typename FunT >
++  explicit FireAndForgetAsyncClosure(FunT&& functor, typename std::enable_if< std::is_constructible< FunctorT, FunT&& >::value, int >::type = 0)
++      : functor_(std::forward< FunT >(functor)) {}
+   virtual void Execute() {
+     functor_();
+   }
+@@ -82,16 +85,17 @@ class NotifyingAsyncClosureBase : public
+ template <class ReturnT, class FunctorT, class HostT>
+ class NotifyingAsyncClosure : public NotifyingAsyncClosureBase {
+  public:
++  template< typename FunT >
+   NotifyingAsyncClosure(AsyncInvoker* invoker,
+                         const Location& callback_posted_from,
+                         Thread* calling_thread,
+-                        const FunctorT& functor,
++                        FunT&& functor,
+                         void (HostT::*callback)(ReturnT),
+                         HostT* callback_host)
+       : NotifyingAsyncClosureBase(invoker,
+                                   callback_posted_from,
+                                   calling_thread),
+-        functor_(functor),
++        functor_(std::forward< FunT >(functor)),
+         callback_(callback),
+         callback_host_(callback_host) {}
+   virtual void Execute() {
+@@ -113,16 +117,17 @@ template <class FunctorT, class HostT>
+ class NotifyingAsyncClosure<void, FunctorT, HostT>
+     : public NotifyingAsyncClosureBase {
+  public:
++  template< typename FunT >
+   NotifyingAsyncClosure(AsyncInvoker* invoker,
+                         const Location& callback_posted_from,
+                         Thread* calling_thread,
+-                        const FunctorT& functor,
++                        FunT& functor,
+                         void (HostT::*callback)(),
+                         HostT* callback_host)
+       : NotifyingAsyncClosureBase(invoker,
+                                   callback_posted_from,
+                                   calling_thread),
+-        functor_(functor) {
++        functor_(std::forward< FunT >(functor)) {
+     SetCallback(Callback0<void>(Bind(callback, callback_host)));
+   }
+   virtual void Execute() {
+Index: webrtc/src/webrtc/base/asyncinvoker.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/asyncinvoker.h	2017-01-12 16:03:41.417216640 +0300
++++ webrtc/src/webrtc/base/asyncinvoker.h	2017-01-12 16:03:41.415216649 +0300
+@@ -11,6 +11,8 @@
+ #ifndef WEBRTC_BASE_ASYNCINVOKER_H_
+ #define WEBRTC_BASE_ASYNCINVOKER_H_
+ 
++#include <utility>
++#include <type_traits>
+ #include "webrtc/base/asyncinvoker-inl.h"
+ #include "webrtc/base/bind.h"
+ #include "webrtc/base/constructormagic.h"
+@@ -77,10 +79,10 @@ class AsyncInvoker : public MessageHandl
+   template <class ReturnT, class FunctorT>
+   void AsyncInvoke(const Location& posted_from,
+                    Thread* thread,
+-                   const FunctorT& functor,
++                   FunctorT&& functor,
+                    uint32_t id = 0) {
+     scoped_refptr<AsyncClosure> closure(
+-        new RefCountedObject<FireAndForgetAsyncClosure<FunctorT> >(functor));
++        new RefCountedObject<FireAndForgetAsyncClosure< typename std::remove_cv< typename std::remove_reference< FunctorT >::type >::type > >(std::forward< FunctorT >(functor)));
+     DoInvoke(posted_from, thread, closure, id);
+   }
+ 
+@@ -89,11 +91,11 @@ class AsyncInvoker : public MessageHandl
+   template <class ReturnT, class FunctorT>
+   void AsyncInvokeDelayed(const Location& posted_from,
+                           Thread* thread,
+-                          const FunctorT& functor,
++                          FunctorT&& functor,
+                           uint32_t delay_ms,
+                           uint32_t id = 0) {
+     scoped_refptr<AsyncClosure> closure(
+-        new RefCountedObject<FireAndForgetAsyncClosure<FunctorT> >(functor));
++        new RefCountedObject<FireAndForgetAsyncClosure< typename std::remove_cv< typename std::remove_reference< FunctorT >::type >::type > >(std::forward< FunctorT >(functor)));
+     DoInvokeDelayed(posted_from, thread, closure, delay_ms, id);
+   }
+ 
+@@ -104,13 +106,13 @@ class AsyncInvoker : public MessageHandl
+   void AsyncInvoke(const Location& posted_from,
+                    const Location& callback_posted_from,
+                    Thread* thread,
+-                   const FunctorT& functor,
++                   FunctorT&& functor,
+                    void (HostT::*callback)(ReturnT),
+                    HostT* callback_host,
+                    uint32_t id = 0) {
+     scoped_refptr<AsyncClosure> closure(
+-        new RefCountedObject<NotifyingAsyncClosure<ReturnT, FunctorT, HostT> >(
+-            this, callback_posted_from, Thread::Current(), functor, callback,
++        new RefCountedObject<NotifyingAsyncClosure<ReturnT, typename std::remove_cv< typename std::remove_reference< FunctorT >::type >::type, HostT> >(
++            this, callback_posted_from, Thread::Current(), std::forward< FunctorT >(functor), callback,
+             callback_host));
+     DoInvoke(posted_from, thread, closure, id);
+   }
+@@ -123,13 +125,13 @@ class AsyncInvoker : public MessageHandl
+   void AsyncInvoke(const Location& posted_from,
+                    const Location& callback_posted_from,
+                    Thread* thread,
+-                   const FunctorT& functor,
++                   FunctorT&& functor,
+                    void (HostT::*callback)(),
+                    HostT* callback_host,
+                    uint32_t id = 0) {
+     scoped_refptr<AsyncClosure> closure(
+-        new RefCountedObject<NotifyingAsyncClosure<void, FunctorT, HostT> >(
+-            this, callback_posted_from, Thread::Current(), functor, callback,
++        new RefCountedObject<NotifyingAsyncClosure<void, typename std::remove_cv< typename std::remove_reference< FunctorT >::type >::type, HostT> >(
++            this, callback_posted_from, Thread::Current(), std::forward< FunctorT >(functor), callback,
+             callback_host));
+     DoInvoke(posted_from, thread, closure, id);
+   }
+@@ -181,12 +183,12 @@ class GuardedAsyncInvoker : public sigsl
+   // immediately. Returns false if the thread has died.
+   template <class ReturnT, class FunctorT>
+   bool AsyncInvoke(const Location& posted_from,
+-                   const FunctorT& functor,
++                   FunctorT&& functor,
+                    uint32_t id = 0) {
+     rtc::CritScope cs(&crit_);
+     if (thread_ == nullptr)
+       return false;
+-    invoker_.AsyncInvoke<ReturnT, FunctorT>(posted_from, thread_, functor, id);
++    invoker_.AsyncInvoke<ReturnT, FunctorT>(posted_from, thread_, std::forward< FunctorT >(functor), id);
+     return true;
+   }
+ 
+@@ -194,14 +196,14 @@ class GuardedAsyncInvoker : public sigsl
+   // completion. Returns immediately. Returns false if the thread has died.
+   template <class ReturnT, class FunctorT>
+   bool AsyncInvokeDelayed(const Location& posted_from,
+-                          const FunctorT& functor,
++                          FunctorT&& functor,
+                           uint32_t delay_ms,
+                           uint32_t id = 0) {
+     rtc::CritScope cs(&crit_);
+     if (thread_ == nullptr)
+       return false;
+     invoker_.AsyncInvokeDelayed<ReturnT, FunctorT>(posted_from, thread_,
+-                                                   functor, delay_ms, id);
++                                                   std::forward< FunctorT >(functor), delay_ms, id);
+     return true;
+   }
+ 
+@@ -210,7 +212,7 @@ class GuardedAsyncInvoker : public sigsl
+   template <class ReturnT, class FunctorT, class HostT>
+   bool AsyncInvoke(const Location& posted_from,
+                    const Location& callback_posted_from,
+-                   const FunctorT& functor,
++                   FunctorT&& functor,
+                    void (HostT::*callback)(ReturnT),
+                    HostT* callback_host,
+                    uint32_t id = 0) {
+@@ -218,7 +220,7 @@ class GuardedAsyncInvoker : public sigsl
+     if (thread_ == nullptr)
+       return false;
+     invoker_.AsyncInvoke<ReturnT, FunctorT, HostT>(
+-        posted_from, callback_posted_from, thread_, functor, callback,
++        posted_from, callback_posted_from, thread_, std::forward< FunctorT >(functor), callback,
+         callback_host, id);
+     return true;
+   }
+@@ -228,7 +230,7 @@ class GuardedAsyncInvoker : public sigsl
+   template <class ReturnT, class FunctorT, class HostT>
+   bool AsyncInvoke(const Location& posted_from,
+                    const Location& callback_posted_from,
+-                   const FunctorT& functor,
++                   FunctorT&& functor,
+                    void (HostT::*callback)(),
+                    HostT* callback_host,
+                    uint32_t id = 0) {
+@@ -236,7 +238,7 @@ class GuardedAsyncInvoker : public sigsl
+     if (thread_ == nullptr)
+       return false;
+     invoker_.AsyncInvoke<ReturnT, FunctorT, HostT>(
+-        posted_from, callback_posted_from, thread_, functor, callback,
++        posted_from, callback_posted_from, thread_, std::forward< FunctorT >(functor), callback,
+         callback_host, id);
+     return true;
+   }

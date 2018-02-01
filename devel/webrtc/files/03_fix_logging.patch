@@ -1,0 +1,150 @@
+Index: webrtc/src/webrtc/system_wrappers/source/logging.cc
+===================================================================
+--- webrtc.orig/src/webrtc/system_wrappers/source/logging.cc	2017-01-12 16:02:44.825477714 +0300
++++ webrtc/src/webrtc/system_wrappers/source/logging.cc	2017-01-12 16:02:44.822477728 +0300
+@@ -35,11 +35,15 @@ TraceLevel WebRtcSeverity(LoggingSeverit
+ // Return the filename portion of the string (that following the last slash).
+ const char* FilenameFromPath(const char* file) {
+   const char* end1 = ::strrchr(file, '/');
+-  const char* end2 = ::strrchr(file, '\\');
+-  if (!end1 && !end2)
+-    return file;
++  if (!end1)
++    end1 = file;
+   else
+-    return (end1 > end2) ? end1 + 1 : end2 + 1;
++    ++end1;
++  const char* end2 = ::strrchr(end1, '\\');
++  if (!end2)
++    return end1;
++  else
++    return end2 + 1;
+ }
+ 
+ }  // namespace
+Index: webrtc/src/webrtc/base/logging.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/logging.cc	2017-01-12 16:02:44.825477714 +0300
++++ webrtc/src/webrtc/base/logging.cc	2017-01-12 16:02:44.822477728 +0300
+@@ -50,13 +50,17 @@ namespace rtc {
+ namespace {
+ 
+ // Return the filename portion of the string (that following the last slash).
+-const char* FilenameFromPath(const char* file) {
++inline const char* FilenameFromPath(const char* file) {
+   const char* end1 = ::strrchr(file, '/');
+-  const char* end2 = ::strrchr(file, '\\');
+-  if (!end1 && !end2)
+-    return file;
++  if (!end1)
++    end1 = file;
+   else
+-    return (end1 > end2) ? end1 + 1 : end2 + 1;
++    ++end1;
++  const char* end2 = ::strrchr(end1, '\\');
++  if (!end2)
++    return end1;
++  else
++    return end2 + 1;
+ }
+ 
+ }  // namespace
+@@ -204,9 +208,10 @@ LogMessage::~LogMessage() {
+   }
+ 
+   CritScope cs(&g_log_crit);
++  const LoggingSeverity sev = severity_;
+   for (auto& kv : streams_) {
+     if (severity_ >= kv.second) {
+-      kv.first->OnLogMessage(str);
++      kv.first->OnLogMessage(sev, str);
+     }
+   }
+ }
+@@ -329,10 +334,25 @@ void LogMessage::ConfigureLogging(const
+   LogToDebug(debug_level);
+ }
+ 
++bool LogMessage::SetStreamMinLogSeverity(LogSink* stream, LoggingSeverity stream_min_sev) {
++  CritScope cs(&g_log_crit);
++  bool found = false;
++  LoggingSeverity min_sev = dbg_sev_;
++  for (StreamList::iterator it = streams_.begin(), end = streams_.end(); it != end; ++it) {
++    if (it->first == stream) {
++      it->second = stream_min_sev;
++      found = true;
++    }
++    min_sev = std::min(min_sev, it->second);
++  }
++  min_sev_ = min_sev;
++  return found;
++}
++
+ void LogMessage::UpdateMinLogSeverity() EXCLUSIVE_LOCKS_REQUIRED(g_log_crit) {
+   LoggingSeverity min_sev = dbg_sev_;
+   for (auto& kv : streams_) {
+-    min_sev = std::min(dbg_sev_, kv.second);
++    min_sev = std::min(min_sev, kv.second);
+   }
+   min_sev_ = min_sev;
+ }
+Index: webrtc/src/webrtc/base/logging.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/logging.h	2017-01-12 16:02:44.825477714 +0300
++++ webrtc/src/webrtc/base/logging.h	2017-01-12 16:02:44.823477723 +0300
+@@ -134,7 +134,7 @@ class LogSink {
+  public:
+   LogSink() {}
+   virtual ~LogSink() {}
+-  virtual void OnLogMessage(const std::string& message) = 0;
++  virtual void OnLogMessage(LoggingSeverity severity, const std::string& message) = 0;
+ };
+ 
+ class LogMessage {
+@@ -188,6 +188,7 @@ class LogMessage {
+   static int GetLogToStream(LogSink* stream = NULL);
+   static void AddLogToStream(LogSink* stream, LoggingSeverity min_sev);
+   static void RemoveLogToStream(LogSink* stream);
++  static bool SetStreamMinLogSeverity(LogSink* stream, LoggingSeverity min_sev);
+ 
+   // Testing against MinLogSeverity allows code to avoid potentially expensive
+   // logging operations by pre-checking the logging level.
+Index: webrtc/src/webrtc/base/logging_unittest.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/logging_unittest.cc	2017-01-12 16:02:44.825477714 +0300
++++ webrtc/src/webrtc/base/logging_unittest.cc	2017-01-12 16:02:44.823477723 +0300
+@@ -28,7 +28,7 @@ class LogSinkImpl
+   explicit LogSinkImpl(P* p) : Base(p) {}
+ 
+  private:
+-  void OnLogMessage(const std::string& message) override {
++  void OnLogMessage(LoggingSeverity, const std::string& message) override {
+     static_cast<Base*>(this)->WriteAll(
+         message.data(), message.size(), nullptr, nullptr);
+   }
+Index: webrtc/src/webrtc/base/logsinks.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/logsinks.cc	2017-01-12 16:02:44.825477714 +0300
++++ webrtc/src/webrtc/base/logsinks.cc	2017-01-12 16:02:44.823477723 +0300
+@@ -35,7 +35,7 @@ FileRotatingLogSink::FileRotatingLogSink
+ FileRotatingLogSink::~FileRotatingLogSink() {
+ }
+ 
+-void FileRotatingLogSink::OnLogMessage(const std::string& message) {
++void FileRotatingLogSink::OnLogMessage(LoggingSeverity, const std::string& message) {
+   if (stream_->GetState() != SS_OPEN) {
+     std::cerr << "Init() must be called before adding this sink." << std::endl;
+     return;
+Index: webrtc/src/webrtc/base/logsinks.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/logsinks.h	2017-01-12 16:02:44.825477714 +0300
++++ webrtc/src/webrtc/base/logsinks.h	2017-01-12 16:02:44.823477723 +0300
+@@ -34,7 +34,7 @@ class FileRotatingLogSink : public LogSi
+ 
+   // Writes the message to the current file. It will spill over to the next
+   // file if needed.
+-  void OnLogMessage(const std::string& message) override;
++  void OnLogMessage(LoggingSeverity sev, const std::string& message) override;
+ 
+   // Deletes any existing files in the directory and creates a new log file.
+   virtual bool Init();

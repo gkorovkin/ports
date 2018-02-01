@@ -1,0 +1,54 @@
+Index: webrtc/src/webrtc/base/location.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/location.cc	2017-01-12 16:03:47.529188697 +0300
++++ webrtc/src/webrtc/base/location.cc	2017-01-12 16:03:47.527188706 +0300
+@@ -14,21 +14,6 @@
+ 
+ namespace rtc {
+ 
+-Location::Location(const char* function_name, const char* file_and_line)
+-    : function_name_(function_name), file_and_line_(file_and_line) {}
+-
+-Location::Location() : function_name_("Unknown"), file_and_line_("Unknown") {}
+-
+-Location::Location(const Location& other)
+-    : function_name_(other.function_name_),
+-      file_and_line_(other.file_and_line_) {}
+-
+-Location& Location::operator=(const Location& other) {
+-  function_name_ = other.function_name_;
+-  file_and_line_ = other.file_and_line_;
+-  return *this;
+-}
+-
+ std::string Location::ToString() const {
+   char buf[256];
+   sprintfn(buf, sizeof(buf), "%s@%s", function_name_, file_and_line_);
+Index: webrtc/src/webrtc/base/location.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/location.h	2017-01-12 16:03:47.529188697 +0300
++++ webrtc/src/webrtc/base/location.h	2017-01-12 16:03:47.528188702 +0300
+@@ -31,13 +31,17 @@ class Location {
+   // why the file name and line number are combined into one argument.
+   //
+   // Once TracingV2 is available, separate the file name and line number.
+-  Location(const char* function_name, const char* file_and_line);
+-  Location();
+-  Location(const Location& other);
+-  Location& operator=(const Location& other);
++  constexpr Location(const char* function_name, const char* file_and_line) noexcept : function_name_(function_name), file_and_line_(file_and_line) {}
++  constexpr Location() noexcept : function_name_("Unknown"), file_and_line_("Unknown") {}
++  constexpr Location(const Location& other) noexcept : function_name_(other.function_name_), file_and_line_(other.file_and_line_) {}
++  Location& operator=(const Location& other) noexcept {
++    function_name_ = other.function_name_;
++    file_and_line_ = other.file_and_line_;
++    return *this;
++  }
+ 
+-  const char* function_name() const { return function_name_; }
+-  const char* file_and_line() const { return file_and_line_; }
++  const char* function_name() const noexcept { return function_name_; }
++  const char* file_and_line() const noexcept { return file_and_line_; }
+ 
+   std::string ToString() const;
+ 

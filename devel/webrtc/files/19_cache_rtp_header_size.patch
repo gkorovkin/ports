@@ -1,0 +1,65 @@
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc	2017-01-12 16:03:32.539257314 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.cc	2017-01-12 16:03:32.535257332 +0300
+@@ -108,6 +108,7 @@ RTPSender::RTPSender(
+       send_packet_observer_(send_packet_observer),
+       bitrate_callback_(bitrate_callback),
+       // RTP variables
++      rtp_header_length_(0),
+       ssrc_db_(SSRCDatabase::GetSSRCDatabase()),
+       remote_ssrc_(0),
+       sequence_number_forced_(false),
+@@ -192,6 +193,7 @@ uint32_t RTPSender::NackOverheadRate() c
+ int32_t RTPSender::RegisterRtpHeaderExtension(RTPExtensionType type,
+                                               uint8_t id) {
+   rtc::CritScope lock(&send_critsect_);
++  rtp_header_length_ = 0; // recalculate RTP header length, when needed
+   switch (type) {
+     case kRtpExtensionVideoRotation:
+     case kRtpExtensionPlayoutDelay:
+@@ -215,6 +217,7 @@ bool RTPSender::IsRtpHeaderExtensionRegi
+ 
+ int32_t RTPSender::DeregisterRtpHeaderExtension(RTPExtensionType type) {
+   rtc::CritScope lock(&send_critsect_);
++  rtp_header_length_ = 0; // recalculate RTP header length, when needed
+   return rtp_header_extension_map_.Deregister(type);
+ }
+ 
+@@ -980,9 +983,13 @@ void RTPSender::ProcessBitrate() {
+ 
+ size_t RTPSender::RtpHeaderLength() const {
+   rtc::CritScope lock(&send_critsect_);
+-  size_t rtp_header_length = kRtpHeaderLength;
+-  rtp_header_length += sizeof(uint32_t) * csrcs_.size();
+-  rtp_header_length += RtpHeaderExtensionLength();
++  size_t rtp_header_length = rtp_header_length_;
++  if (rtp_header_length == 0) {
++    rtp_header_length = kRtpHeaderLength;
++    rtp_header_length += sizeof(uint32_t) * csrcs_.size();
++    rtp_header_length += RtpHeaderExtensionLength();
++    rtp_header_length_ = rtp_header_length;
++  }
+   return rtp_header_length;
+ }
+ 
+@@ -1134,6 +1141,7 @@ void RTPSender::SetCsrcs(const std::vect
+   assert(csrcs.size() <= kRtpCsrcSize);
+   rtc::CritScope lock(&send_critsect_);
+   csrcs_ = csrcs;
++  rtp_header_length_ = 0; // recalculate RTP header length, when needed
+ }
+ 
+ void RTPSender::SetSequenceNumber(uint16_t seq) {
+Index: webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/rtp_rtcp/source/rtp_sender.h	2017-01-12 16:03:32.539257314 +0300
++++ webrtc/src/webrtc/modules/rtp_rtcp/source/rtp_sender.h	2017-01-12 16:03:32.537257323 +0300
+@@ -309,6 +309,7 @@ class RTPSender {
+   BitrateStatisticsObserver* const bitrate_callback_;
+ 
+   // RTP variables
++  mutable size_t rtp_header_length_ GUARDED_BY(send_critsect_);
+   uint32_t timestamp_offset_ GUARDED_BY(send_critsect_);
+   SSRCDatabase* const ssrc_db_;
+   uint32_t remote_ssrc_ GUARDED_BY(send_critsect_);

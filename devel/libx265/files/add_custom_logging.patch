@@ -1,0 +1,270 @@
+Index: x265-2.3+0-3037c1448549/source/encoder/api.cpp
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/encoder/api.cpp	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/encoder/api.cpp	2017-02-15 13:31:51.827808053 +0300
+@@ -321,6 +321,11 @@ void x265_picture_free(x265_picture *p)
+     return x265_free(p);
+ }
+ 
++void x265_set_log(x265_log_t log)
++{
++    X265_NS::g_x265_log = log;
++}
++
+ static const x265_api libapi =
+ {
+     X265_MAJOR_VERSION,
+@@ -356,6 +361,8 @@ static const x265_api libapi =
+ 
+     sizeof(x265_frame_stats),
+     &x265_encoder_intra_refresh,
++
++    &x265_set_log,
+ };
+ 
+ typedef const x265_api* (*api_get_func)(int bitDepth);
+Index: x265-2.3+0-3037c1448549/source/x265.h
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/x265.h	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/x265.h	2017-02-15 13:31:51.827808053 +0300
+@@ -1574,6 +1574,20 @@ int x265_encoder_intra_refresh(x265_enco
+  *       release library static allocations, reset configured CTU size */
+ void x265_cleanup(void);
+ 
++/* Logging function. The function is called whenever a log message is emitted.
++ * The default function prints the message to stderr.
++ * @param param Parameters of the encoder that emitted the message
++ * @param caller A string identifying the log message originator
++ * @param national If not 0, the message may contain national characters
++ * @param level Log verbosity level, one of X265_LOG_*
++ * @param fmt printf-style format string of the message; any subsequent arguments
++ *            are to be formatted into the message according to this string */
++typedef void (*x265_log_t)(const x265_param* param, const char* caller, int national, int level, const char* fmt, ...);
++
++/* x265_set_log:
++ *       Sets a custom logger function */
++void x265_set_log(x265_log_t log);
++
+ #define X265_MAJOR_VERSION 1
+ 
+ /* === Multi-lib API ===
+@@ -1618,6 +1632,9 @@ typedef struct x265_api
+ 
+     int           sizeof_frame_stats;   /* sizeof(x265_frame_stats) */
+     int           (*encoder_intra_refresh)(x265_encoder*);
++
++    void          (*set_log)(x265_log_t log);
++
+     /* add new pointers to the end, or increment X265_MAJOR_VERSION */
+ } x265_api;
+ 
+Index: x265-2.3+0-3037c1448549/source/common/common.cpp
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/common/common.cpp	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/common/common.cpp	2017-02-15 13:31:51.828808048 +0300
+@@ -102,7 +102,9 @@ int x265_exp2fix8(double x)
+     return (x265_exp2_lut[i & 63] + 256) << (i >> 6) >> 8;
+ }
+ 
+-void general_log(const x265_param* param, const char* caller, int level, const char* fmt, ...)
++x265_log_t g_x265_log = &general_log;
++
++void general_log(const x265_param* param, const char* caller, int national, int level, const char* fmt, ...)
+ {
+     if (param && level > param->logLevel)
+         return;
+@@ -138,62 +140,32 @@ void general_log(const x265_param* param
+     va_start(arg, fmt);
+     vsnprintf(buffer + p, bufferSize - p, fmt, arg);
+     va_end(arg);
+-    fputs(buffer, stderr);
+-}
+ 
+ #if _WIN32
+-/* For Unicode filenames in Windows we convert UTF-8 strings to UTF-16 and we use _w functions.
+- * For other OS we do not make any changes. */
+-void general_log_file(const x265_param* param, const char* caller, int level, const char* fmt, ...)
+-{
+-    if (param && level > param->logLevel)
+-        return;
+-    const int bufferSize = 4096;
+-    char buffer[bufferSize];
+-    int p = 0;
+-    const char* log_level;
+-    switch (level)
++    if (national)
+     {
+-    case X265_LOG_ERROR:
+-        log_level = "error";
+-        break;
+-    case X265_LOG_WARNING:
+-        log_level = "warning";
+-        break;
+-    case X265_LOG_INFO:
+-        log_level = "info";
+-        break;
+-    case X265_LOG_DEBUG:
+-        log_level = "debug";
+-        break;
+-    case X265_LOG_FULL:
+-        log_level = "full";
+-        break;
+-    default:
+-        log_level = "unknown";
+-        break;
++        HANDLE console = GetStdHandle(STD_ERROR_HANDLE);
++        DWORD mode;
++        if (GetConsoleMode(console, &mode))
++        {
++            wchar_t buf_utf16[bufferSize];
++            int length_utf16 = MultiByteToWideChar(CP_UTF8, 0, buffer, -1, buf_utf16, sizeof(buf_utf16)/sizeof(wchar_t)) - 1;
++            if (length_utf16 > 0)
++                WriteConsoleW(console, buf_utf16, length_utf16, &mode, NULL);
++            return;
++        }
+     }
++#else
++    // Suppress warnings about unused argument
++    (void)national;
++#endif
+ 
+-    if (caller)
+-        p += sprintf(buffer, "%-4s [%s]: ", caller, log_level);
+-    va_list arg;
+-    va_start(arg, fmt);
+-    vsnprintf(buffer + p, bufferSize - p, fmt, arg);
+-    va_end(arg);
+-
+-    HANDLE console = GetStdHandle(STD_ERROR_HANDLE);
+-    DWORD mode;
+-    if (GetConsoleMode(console, &mode))
+-    {
+-        wchar_t buf_utf16[bufferSize];
+-        int length_utf16 = MultiByteToWideChar(CP_UTF8, 0, buffer, -1, buf_utf16, sizeof(buf_utf16)/sizeof(wchar_t)) - 1;
+-        if (length_utf16 > 0)
+-            WriteConsoleW(console, buf_utf16, length_utf16, &mode, NULL);
+-    }
+-    else
+-        fputs(buffer, stderr);
++    fputs(buffer, stderr);
+ }
+ 
++#if _WIN32
++/* For Unicode filenames in Windows we convert UTF-8 strings to UTF-16 and we use _w functions.
++ * For other OS we do not make any changes. */
+ FILE* x265_fopen(const char* fileName, const char* mode)
+ {
+     wchar_t buf_utf16[MAX_PATH * 2], mode_utf16[16];
+Index: x265-2.3+0-3037c1448549/source/common/common.h
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/common/common.h	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/common/common.h	2017-02-15 13:31:51.828808048 +0300
+@@ -413,16 +413,15 @@ void extendPicBorder(pixel* recon, intpt
+ 
+ /* located in common.cpp */
+ int64_t  x265_mdate(void);
+-#define  x265_log(param, ...) general_log(param, "x265", __VA_ARGS__)
+-#define  x265_log_file(param, ...) general_log_file(param, "x265", __VA_ARGS__)
+-void     general_log(const x265_param* param, const char* caller, int level, const char* fmt, ...);
++extern x265_log_t g_x265_log;
++#define  x265_log(param, ...) X265_NS::g_x265_log(param, "x265", 0, __VA_ARGS__)
++#define  x265_log_file(param, ...) X265_NS::g_x265_log(param, "x265", 1, __VA_ARGS__)
++void     general_log(const x265_param* param, const char* caller, int national, int level, const char* fmt, ...);
+ #if _WIN32
+-void     general_log_file(const x265_param* param, const char* caller, int level, const char* fmt, ...);
+ FILE*    x265_fopen(const char* fileName, const char* mode);
+ int      x265_unlink(const char* fileName);
+ int      x265_rename(const char* oldName, const char* newName);
+ #else
+-#define  general_log_file(param, caller, level, fmt, ...) general_log(param, caller, level, fmt, __VA_ARGS__)
+ #define  x265_fopen(fileName, mode) fopen(fileName, mode)
+ #define  x265_unlink(fileName) unlink(fileName)
+ #define  x265_rename(oldName, newName) rename(oldName, newName)
+Index: x265-2.3+0-3037c1448549/source/encoder/encoder.cpp
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/encoder/encoder.cpp	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/encoder/encoder.cpp	2017-02-15 13:31:51.828808048 +0300
+@@ -1211,10 +1211,10 @@ void Encoder::printSummary()
+             p += sprintf(buffer + p, ", SSIM Mean Y: %.7f (%6.3f dB)", m_analyzeAll.m_globalSsim / m_analyzeAll.m_numPics, x265_ssim2dB(m_analyzeAll.m_globalSsim / m_analyzeAll.m_numPics));
+ 
+         sprintf(buffer + p, "\n");
+-        general_log(m_param, NULL, X265_LOG_INFO, buffer);
++        g_x265_log(m_param, NULL, false, X265_LOG_INFO, buffer);
+     }
+     else
+-        general_log(m_param, NULL, X265_LOG_INFO, "\nencoded 0 frames\n");
++        g_x265_log(m_param, NULL, false, X265_LOG_INFO, "\nencoded 0 frames\n");
+ 
+ #if DETAILED_CU_STATS
+     /* Summarize stats from all frame encoders */
+Index: x265-2.3+0-3037c1448549/source/output/reconplay.cpp
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/output/reconplay.cpp	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/output/reconplay.cpp	2017-02-15 13:31:51.828808048 +0300
+@@ -43,7 +43,7 @@ bool ReconPlay::pipeValid;
+ static void sigpipe_handler(int)
+ {
+     if (ReconPlay::pipeValid)
+-        general_log(NULL, "exec", X265_LOG_ERROR, "pipe closed\n");
++        g_x265_log(NULL, "exec", false, X265_LOG_ERROR, "pipe closed\n");
+     ReconPlay::pipeValid = false;
+ }
+ #endif
+@@ -52,7 +52,7 @@ ReconPlay::ReconPlay(const char* command
+ {
+ #ifndef _WIN32
+     if (signal(SIGPIPE, sigpipe_handler) == SIG_ERR)
+-        general_log(&param, "exec", X265_LOG_ERROR, "Unable to register SIGPIPE handler: %s\n", strerror(errno));
++        g_x265_log(&param, "exec", false, X265_LOG_ERROR, "Unable to register SIGPIPE handler: %s\n", strerror(errno));
+ #endif
+ 
+     width = param.sourceWidth;
+@@ -83,7 +83,7 @@ ReconPlay::ReconPlay(const char* command
+         return;
+     }
+     else
+-        general_log(&param, "exec", X265_LOG_ERROR, "popen(%s) failed\n", commandLine);
++        g_x265_log(&param, "exec", false, X265_LOG_ERROR, "popen(%s) failed\n", commandLine);
+ 
+ fail:
+     threadActive = false;
+Index: x265-2.3+0-3037c1448549/source/x265.cpp
+===================================================================
+--- x265-2.3+0-3037c1448549.orig/source/x265.cpp	2017-02-15 13:31:51.829808042 +0300
++++ x265-2.3+0-3037c1448549/source/x265.cpp	2017-02-15 13:31:51.828808048 +0300
+@@ -421,7 +421,7 @@ bool CLIOptions::parse(int argc, char **
+         else
+             sprintf(buf + p, " frames %u - %d of %d", this->seek, this->seek + this->framesToBeEncoded - 1, info.frameCount);
+ 
+-        general_log(param, input->getName(), X265_LOG_INFO, "%s\n", buf);
++        general_log(param, input->getName(), false, X265_LOG_INFO, "%s\n", buf);
+     }
+ 
+     this->input->startReader();
+@@ -439,7 +439,7 @@ bool CLIOptions::parse(int argc, char **
+             this->recon = 0;
+         }
+         else
+-            general_log(param, this->recon->getName(), X265_LOG_INFO,
++            general_log(param, this->recon->getName(), false, X265_LOG_INFO,
+                     "reconstructed images %dx%d fps %d/%d %s\n",
+                     param->sourceWidth, param->sourceHeight, param->fpsNum, param->fpsDenom,
+                     x265_source_csp_names[param->internalCsp]);
+@@ -451,7 +451,7 @@ bool CLIOptions::parse(int argc, char **
+         x265_log_file(param, X265_LOG_ERROR, "failed to open output file <%s> for writing\n", outputfn);
+         return true;
+     }
+-    general_log_file(param, this->output->getName(), X265_LOG_INFO, "output file: %s\n", outputfn);
++    general_log(param, this->output->getName(), true, X265_LOG_INFO, "output file: %s\n", outputfn);
+     return false;
+ }
+ 
+@@ -763,7 +763,7 @@ fail:
+     cliopt.output->closeFile(largest_pts, second_largest_pts);
+ 
+     if (b_ctrl_c)
+-        general_log(param, NULL, X265_LOG_INFO, "aborted at input frame %d, output frame %d\n",
++        general_log(param, NULL, false, X265_LOG_INFO, "aborted at input frame %d, output frame %d\n",
+                     cliopt.seek + inFrameCount, stats.encodedPictureCount);
+ 
+     api->cleanup(); /* Free library singletons */

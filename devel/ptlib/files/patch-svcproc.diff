@@ -1,5 +1,5 @@
---- src.orig/ptlib/unix/svcproc.cxx	2016-11-08 21:07:18.000000000 +0300
-+++ src/ptlib/unix/svcproc.cxx	2016-11-08 21:11:27.000000000 +0300
+--- a/src.orig/ptlib/unix/svcproc.cxx	2016-11-08 21:07:18.000000000 +0300
++++ b/src/ptlib/unix/svcproc.cxx	2016-11-08 21:11:27.000000000 +0300
 @@ -279,7 +279,7 @@
      pid_t pid;
 

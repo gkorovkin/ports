@@ -1,0 +1,103 @@
+The patch is needed because 03_devirtualize_sigslot.patch removed virtual destructors from the base classes.
+Some of the webrtc/libjingle classes relied on has_slots having a virtual destructor, so we make destructors of those classes virtual.
+
+Index: webrtc/src/chromium/src/jingle/notifier/base/xmpp_connection.h
+===================================================================
+--- webrtc.orig/src/chromium/src/jingle/notifier/base/xmpp_connection.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/chromium/src/jingle/notifier/base/xmpp_connection.h	2017-01-12 16:03:03.722390052 +0300
+@@ -78,7 +78,7 @@ class XmppConnection
+   // Invalidates any weak pointers passed to the delegate by
+   // OnConnect(), but does not trigger a call to the delegate's
+   // OnError() function.
+-  ~XmppConnection() override;
++  virtual ~XmppConnection();
+ 
+  private:
+   FRIEND_TEST_ALL_PREFIXES(XmppConnectionTest, RaisedError);
+Index: webrtc/src/webrtc/base/asyncinvoker.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/asyncinvoker.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/webrtc/base/asyncinvoker.h	2017-01-12 16:03:03.723390047 +0300
+@@ -169,7 +169,7 @@ class AsyncInvoker : public MessageHandl
+ class GuardedAsyncInvoker : public sigslot::has_slots<> {
+  public:
+   GuardedAsyncInvoker();
+-  ~GuardedAsyncInvoker() override;
++  virtual ~GuardedAsyncInvoker();
+ 
+   // Synchronously execute all outstanding calls we own, and wait for calls to
+   // complete before returning. Optionally filter by message id. The destructor
+Index: webrtc/src/webrtc/base/asyncpacketsocket.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/asyncpacketsocket.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/webrtc/base/asyncpacketsocket.h	2017-01-12 16:03:03.723390047 +0300
+@@ -76,7 +76,7 @@ class AsyncPacketSocket : public sigslot
+   };
+ 
+   AsyncPacketSocket();
+-  ~AsyncPacketSocket() override;
++  virtual ~AsyncPacketSocket();
+ 
+   // Returns current local address. Address may be set to NULL if the
+   // socket is not bound yet (GetState() returns STATE_BINDING).
+Index: webrtc/src/webrtc/base/natserver.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/natserver.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/webrtc/base/natserver.h	2017-01-12 16:03:03.723390047 +0300
+@@ -65,7 +65,7 @@ class NATServer : public sigslot::has_sl
+       const SocketAddress& internal_udp_addr,
+       const SocketAddress& internal_tcp_addr,
+       SocketFactory* external, const SocketAddress& external_ip);
+-  ~NATServer() override;
++  virtual ~NATServer();
+ 
+   SocketAddress internal_udp_address() const {
+     return udp_server_socket_->GetLocalAddress();
+Index: webrtc/src/webrtc/base/proxyserver.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/proxyserver.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/webrtc/base/proxyserver.h	2017-01-12 16:03:03.724390043 +0300
+@@ -33,7 +33,7 @@ class SocketFactory;
+ class ProxyBinding : public sigslot::has_slots<> {
+  public:
+   ProxyBinding(AsyncProxyServerSocket* in_socket, AsyncSocket* out_socket);
+-  ~ProxyBinding() override;
++  virtual ~ProxyBinding();
+   sigslot::signal1<ProxyBinding*> SignalDestroyed;
+ 
+  private:
+@@ -64,7 +64,7 @@ class ProxyServer : public sigslot::has_
+  public:
+   ProxyServer(SocketFactory* int_factory, const SocketAddress& int_addr,
+               SocketFactory* ext_factory, const SocketAddress& ext_ip);
+-  ~ProxyServer() override;
++  virtual ~ProxyServer();
+ 
+   // Returns the address to which the proxy server is bound
+   SocketAddress GetServerAddress();
+Index: webrtc/src/webrtc/base/testclient.h
+===================================================================
+--- webrtc.orig/src/webrtc/base/testclient.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/webrtc/base/testclient.h	2017-01-12 16:03:03.724390043 +0300
+@@ -43,7 +43,7 @@ class TestClient : public sigslot::has_s
+   // Creates a client that will send and receive with the given socket and
+   // will post itself messages with the given thread.
+   explicit TestClient(AsyncPacketSocket* socket);
+-  ~TestClient() override;
++  virtual ~TestClient();
+ 
+   SocketAddress address() const { return socket_->GetLocalAddress(); }
+   SocketAddress remote_address() const { return socket_->GetRemoteAddress(); }
+Index: webrtc/src/webrtc/p2p/base/stunserver.h
+===================================================================
+--- webrtc.orig/src/webrtc/p2p/base/stunserver.h	2017-01-12 16:03:03.726390034 +0300
++++ webrtc/src/webrtc/p2p/base/stunserver.h	2017-01-12 16:03:03.724390043 +0300
+@@ -25,7 +25,7 @@ class StunServer : public sigslot::has_s
+   // Creates a STUN server, which will listen on the given socket.
+   explicit StunServer(rtc::AsyncUDPSocket* socket);
+   // Removes the STUN server from the socket and deletes the socket.
+-  ~StunServer();
++  virtual ~StunServer();
+ 
+  protected:
+   // Slot for AsyncSocket.PacketRead:

@@ -1,0 +1,34 @@
+Index: webrtc/src/chromium/src/third_party/libyuv/source/row_common.cc
+===================================================================
+--- webrtc.orig/src/chromium/src/third_party/libyuv/source/row_common.cc	2017-01-12 16:03:14.185341728 +0300
++++ webrtc/src/chromium/src/third_party/libyuv/source/row_common.cc	2017-01-12 16:03:14.183341737 +0300
+@@ -1247,14 +1247,21 @@ static __inline void YuvPixel(uint8 y,
+   int br = yuvconstants->kUVBiasBGR[2];
+   int yg = yuvconstants->kYToRgb[0] / 0x0101;
+ #else
+-  int ub = yuvconstants->kUVToB[0];
+-  int ug = yuvconstants->kUVToG[0];
+-  int vg = yuvconstants->kUVToG[1];
+-  int vr = yuvconstants->kUVToR[1];
+-  int bb = yuvconstants->kUVBiasB[0];
+-  int bg = yuvconstants->kUVBiasG[0];
+-  int br = yuvconstants->kUVBiasR[0];
+-  int yg = yuvconstants->kYToRgb[0];
++  const int8* kUVToB = (const int8*)&yuvconstants->kUVToB;
++  const int8* kUVToG = (const int8*)&yuvconstants->kUVToG;
++  const int8* kUVToR = (const int8*)&yuvconstants->kUVToR;
++  const int16* kUVBiasB = (const int16*)&yuvconstants->kUVBiasB;
++  const int16* kUVBiasG = (const int16*)&yuvconstants->kUVBiasG;
++  const int16* kUVBiasR = (const int16*)&yuvconstants->kUVBiasR;
++  const int16* kYToRgb = (const int16*)&yuvconstants->kYToRgb;
++  int ub = kUVToB[0];
++  int ug = kUVToG[0];
++  int vg = kUVToG[1];
++  int vr = kUVToR[1];
++  int bb = kUVBiasB[0];
++  int bg = kUVBiasG[0];
++  int br = kUVBiasR[0];
++  int yg = kYToRgb[0];
+ #endif
+ 
+   uint32 y1 = (uint32)(y * 0x0101 * yg) >> 16;

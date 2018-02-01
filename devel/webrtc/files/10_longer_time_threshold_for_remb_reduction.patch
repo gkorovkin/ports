@@ -1,0 +1,13 @@
+Index: webrtc/src/webrtc/modules/remote_bitrate_estimator/overuse_detector.cc
+===================================================================
+--- webrtc.orig/src/webrtc/modules/remote_bitrate_estimator/overuse_detector.cc	2017-01-12 16:03:01.528400204 +0300
++++ webrtc/src/webrtc/modules/remote_bitrate_estimator/overuse_detector.cc	2017-01-12 16:03:01.526400213 +0300
+@@ -66,7 +66,7 @@ OveruseDetector::OveruseDetector(const O
+     : in_experiment_(!AdaptiveThresholdExperimentIsDisabled()),
+       k_up_(0.0087),
+       k_down_(0.039),
+-      overusing_time_threshold_(100),
++      overusing_time_threshold_(400),
+       options_(options),
+       threshold_(12.5),
+       last_update_ms_(-1),

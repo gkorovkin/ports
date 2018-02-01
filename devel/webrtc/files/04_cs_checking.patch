@@ -1,0 +1,65 @@
+Index: webrtc/src/webrtc/base/criticalsection.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/criticalsection.cc	2017-01-12 16:02:47.141466943 +0300
++++ webrtc/src/webrtc/base/criticalsection.cc	2017-01-12 16:02:47.140466947 +0300
+@@ -8,6 +8,9 @@
+  *  be found in the AUTHORS file in the root of the source tree.
+  */
+ 
++#include <cstdlib>
++#include <cerrno>
++
+ #include "webrtc/base/criticalsection.h"
+ 
+ #include "webrtc/base/checks.h"
+@@ -15,6 +18,15 @@
+ 
+ // TODO(tommi): Split this file up to per-platform implementation files.
+ 
++// Macro for hinting that an expression is likely to be false.
++#if !defined(UNLIKELY)
++#if defined(__GNUC__)
++#define UNLIKELY(x) __builtin_expect(!!(x), 0)
++#else
++#define UNLIKELY(x) (x)
++#endif  // defined(__GNUC__)
++#endif  // !defined(UNLIKELY)
++
+ namespace rtc {
+ 
+ CriticalSection::CriticalSection() {
+@@ -92,7 +104,9 @@ void CriticalSection::Enter() const EXCL
+   ++recursion_;
+ 
+ #else
+-  pthread_mutex_lock(&mutex_);
++  const int res = pthread_mutex_lock(&mutex_);
++  if (UNLIKELY(res != 0))
++    std::abort();
+ #endif
+ 
+ #if CS_DEBUG_CHECKS
+@@ -122,8 +136,11 @@ bool CriticalSection::TryEnter() const E
+   }
+   ++recursion_;
+ #else
+-  if (pthread_mutex_trylock(&mutex_) != 0)
++  const int res = pthread_mutex_trylock(&mutex_);
++  if (res == EBUSY)
+     return false;
++  if (UNLIKELY(res != 0))
++    std::abort();
+ #endif
+ #if CS_DEBUG_CHECKS
+   if (!recursion_count_) {
+@@ -158,7 +175,9 @@ void CriticalSection::Leave() const UNLO
+   if (AtomicOps::Decrement(&lock_queue_) > 0 && !recursion_)
+     dispatch_semaphore_signal(semaphore_);
+ #else
+-  pthread_mutex_unlock(&mutex_);
++  const int res = pthread_mutex_unlock(&mutex_);
++  if (UNLIKELY(res != 0))
++    std::abort();
+ #endif
+ #endif
+ }

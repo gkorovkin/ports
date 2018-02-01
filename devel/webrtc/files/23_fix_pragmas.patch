@@ -1,0 +1,39 @@
+Index: webrtc/src/webrtc/modules/video_coding/codecs/interface/mock/mock_video_codec_interface.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/video_coding/codecs/interface/mock/mock_video_codec_interface.h	2017-01-12 16:03:44.566202237 +0300
++++ webrtc/src/webrtc/modules/video_coding/codecs/interface/mock/mock_video_codec_interface.h	2017-01-12 16:03:44.564202247 +0300
+@@ -11,7 +11,7 @@
+ #ifndef WEBRTC_MODULES_VIDEO_CODING_CODECS_INTERFACE_MOCK_MOCK_VIDEO_CODEC_INTERFACE_H_
+ #define WEBRTC_MODULES_VIDEO_CODING_CODECS_INTERFACE_MOCK_MOCK_VIDEO_CODEC_INTERFACE_H_
+ 
+-#pragma message("WARNING: video_coding/codecs/interface is DEPRECATED; "
++#pragma message("WARNING: video_coding/codecs/interface is DEPRECATED; " \
+     "use video_coding/include")
+ #include <string>
+ #include <vector>
+Index: webrtc/src/webrtc/modules/video_coding/codecs/interface/video_codec_interface.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/video_coding/codecs/interface/video_codec_interface.h	2017-01-12 16:03:44.566202237 +0300
++++ webrtc/src/webrtc/modules/video_coding/codecs/interface/video_codec_interface.h	2017-01-12 16:03:44.564202247 +0300
+@@ -11,7 +11,7 @@
+ #ifndef WEBRTC_MODULES_VIDEO_CODING_CODECS_INTERFACE_VIDEO_CODEC_INTERFACE_H_
+ #define WEBRTC_MODULES_VIDEO_CODING_CODECS_INTERFACE_VIDEO_CODEC_INTERFACE_H_
+ 
+-#pragma message("WARNING: video_coding/codecs/interface is DEPRECATED; "
++#pragma message("WARNING: video_coding/codecs/interface is DEPRECATED; " \
+     "use video_coding/include")
+ #include <vector>
+ 
+Index: webrtc/src/webrtc/modules/video_coding/codecs/interface/video_error_codes.h
+===================================================================
+--- webrtc.orig/src/webrtc/modules/video_coding/codecs/interface/video_error_codes.h	2017-01-12 16:03:44.566202237 +0300
++++ webrtc/src/webrtc/modules/video_coding/codecs/interface/video_error_codes.h	2017-01-12 16:03:44.564202247 +0300
+@@ -11,7 +11,7 @@
+ #ifndef WEBRTC_MODULES_VIDEO_CODING_CODECS_INTERFACE_VIDEO_ERROR_CODES_H_
+ #define WEBRTC_MODULES_VIDEO_CODING_CODECS_INTERFACE_VIDEO_ERROR_CODES_H_
+ 
+-#pragma message("WARNING: video_coding/codecs/interface is DEPRECATED; "
++#pragma message("WARNING: video_coding/codecs/interface is DEPRECATED; " \
+     "use video_coding/include")
+ 
+ // NOTE: in sync with video_coding_module_defines.h

@@ -1,0 +1,52 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+# $Id$
+
+PortSystem          1.0
+
+name                webrtc
+version             53
+categories          devel
+platforms           darwin
+license             BSD
+maintainers         gkorovin
+description         WebRTC library
+long_description    Google(c) library for implementing WebRTC features in C/C++ applications
+
+build.dir           ${worksrcpath}/webrtc-checkout
+
+patchfiles          00_config.patch \
+                    00_enable_call_api_lib.patch \
+                    00_fix_srtp.patch \
+                    00_rename_openmax_dl.patch \
+                    00_unbundle.patch \
+                    01_fix_peerconnection_jni.patch \
+                    02_devirtualize_sigslot.patch \
+                    03_fix_logging.patch \
+                    04_cs_checking.patch \
+                    05_spread_port_allocations.patch \
+                    06_fix_openssl_dtls_handshake.patch \
+                    07_optimize_spl.patch \
+                    08_fix_openssl_compatibility.patch \
+                    09_fix_rtputils.patch \
+                    10_longer_time_threshold_for_remb_reduction.patch \
+                    11_fix_virtual_overrides.patch \
+                    12_disable_audio_classifier.patch \
+                    13_gcc47_workarounds.patch \
+                    14_fix_libyuv.patch \
+                    15_propagate_audio_capture_time.patch \
+                    16_optimize_endian_conversions.patch \
+                    17_optimize_fec.patch \
+                    18_add_known_reflexive_addresses.patch \
+                    19_cache_rtp_header_size.patch \
+                    20_optimize_onetimeevent.patch \
+                    21_add_prepacketized_sending.patch \
+                    22_async_invoker_perfect_forwarding.patch \
+                    23_fix_pragmas.patch \
+                    24_inline_location.patch \
+                    25_movability.patch \
+                    26_fix_missing_includes.patch \
+                    27_inline_rtp_packet.patch \
+                    28_add_referencecountedfinal.patch \
+                    29_inline_codec.patch \
+                    30_gcc49_workarounds.patch
+

@@ -1,0 +1,21 @@
+The patch fixes DTLS handshake in Debian Wheezy and Ubuntu Utopic since OpenSSL patch for CVE-2014-3571
+has been applied to the package (Debian openssl package version 1.0.1e-2+deb7u14). See more details at:
+
+https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=775502
+https://code.google.com/p/webrtc/issues/detail?id=4201
+https://code.google.com/p/chromium/issues/detail?id=447431
+
+Index: webrtc/src/webrtc/base/opensslstreamadapter.cc
+===================================================================
+--- webrtc.orig/src/webrtc/base/opensslstreamadapter.cc	2017-01-12 16:02:51.592446264 +0300
++++ webrtc/src/webrtc/base/opensslstreamadapter.cc	2017-01-12 16:02:51.590446274 +0300
+@@ -1074,6 +1074,9 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLC
+   SSL_CTX_set_info_callback(ctx, OpenSSLAdapter::SSLInfoCallback);
+ #endif
+ 
++  // This fixes DTLS handshake. Without this option partial reads discard unread UDP bytes.
++  SSL_CTX_set_read_ahead(ctx, 1);
++
+   int mode = SSL_VERIFY_PEER;
+   if (client_auth_enabled()) {
+     // Require a certificate from the client.
