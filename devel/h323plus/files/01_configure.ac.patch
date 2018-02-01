@@ -1,35 +1,13 @@
 diff --git a/configure.ac b/configure.ac
-index cce8047..0de3d71 100644
+index 2344327..dd59e27 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -3,6 +3,8 @@ AC_INIT(include/h323.h)
- AC_PROG_CXX
- AC_HEADER_STDC
- 
-+m4_include([pkg.m4])
-+
- dnl this must be updated for every minor revision, and for
- dnl builds when and as necessary
- REQUIRED_PTLIB_MAJOR=2
-@@ -64,9 +66,11 @@ AC_DEFINE_UNQUOTED(OPENH323_VERSION, "$OPENH323_VERSION", [Full version number])
- dnl ########################################################################
- dnl look for ptlib, use a preference order of explicit PTLIBDIR, directory
- dnl at same level, home directory, /usr/local or /usr, pkgconfig.
-+PKG_PROG_PKG_CONFIG
-+PKG_CHECK_MODULES([PTLIB], [ptlib], HAS_PTLIB=1)
- 
- if test "${PTLIBDIR:-unset}" != "unset" ; then 	 
--  AC_CHECK_HEADER(${PTLIBDIR}/version.h, HAS_PTLIB=1) 	 
-+  AC_CHECK_HEADER(${PTLIBDIR}/make/version.h, HAS_PTLIB=1) 	 
- fi
- 
- if test "${HAS_PTLIB:-unset}" = "unset" ; then
-@@ -112,8 +116,6 @@ fi
- AC_CHECK_FILE(${PTLIBDIR}/make/lib.mak, HAS_PTLIB_LIB_MAK=1)
- 
- if test "${HAS_PTLIB_LIB_MAK:-unset}" = "unset" ; then
--  PKG_PROG_PKG_CONFIG
--  PKG_CHECK_MODULES([PTLIB], [ptlib], HAS_PTLIB=1)
-   if test ${HAS_PTLIB}x = 1x; then
-     PTLIBDIR=`${PKG_CONFIG} --variable=prefix ptlib`
-     PTVERSION=`${PKG_CONFIG} --modversion ptlib`
+@@ -79,7 +79,7 @@ if test "${HAS_PTLIB:-unset}" = "unset" ; then
+       PTLIBDIR="${HOME}/ptlib"
+     else
+       if test "${HAS_PTLIB:-unset}" = "unset" ; then
+-        AC_PATH_PROG(PTLIB_CONFIG, ptlib-config, , /usr/local/bin:/usr/bin)
++        AC_PATH_PROG(PTLIB_CONFIG, ptlib-config, , /usr/local/bin:/usr/bin:/opt/local/bin)
+       else
+         if test "${PTLIB_CONFIG:-unset}" = "unset" ; then
+           AC_PATH_PROG(PTLIB_CONFIG, ptlib-config, , /usr/share/ptlib/make/)
