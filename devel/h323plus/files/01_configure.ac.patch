@@ -1,13 +1,18 @@
 diff --git a/configure.ac b/configure.ac
-index 2344327..dd59e27 100644
+index dd59e27..67fc0cd 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -79,7 +79,7 @@ if test "${HAS_PTLIB:-unset}" = "unset" ; then
-       PTLIBDIR="${HOME}/ptlib"
-     else
-       if test "${HAS_PTLIB:-unset}" = "unset" ; then
--        AC_PATH_PROG(PTLIB_CONFIG, ptlib-config, , /usr/local/bin:/usr/bin)
-+        AC_PATH_PROG(PTLIB_CONFIG, ptlib-config, , /usr/local/bin:/usr/bin:/opt/local/bin)
-       else
-         if test "${PTLIB_CONFIG:-unset}" = "unset" ; then
-           AC_PATH_PROG(PTLIB_CONFIG, ptlib-config, , /usr/share/ptlib/make/)
+@@ -969,7 +969,7 @@ AC_PROG_INSTALL
+ 
+ AC_CONFIG_FILES(openh323u.mak)
+ AC_CONFIG_FILES(Makefile)
+-
++AC_CONFIG_FILES(h323plus.pc)
+ 
+ dnl ########################################################################
+ dnl Header file
+@@ -983,4 +983,3 @@ dnl Output configured files
+ AC_CONFIG_SUBDIRS(plugins)
+ 
+ AC_OUTPUT()
+-

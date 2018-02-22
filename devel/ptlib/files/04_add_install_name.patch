@@ -1,0 +1,13 @@
+diff --git a/make/lib.mak b/make/lib.mak
+index 56d5020..a407c6f 100644
+--- a/make/lib.mak
++++ b/make/lib.mak
+@@ -65,7 +65,7 @@ ifeq ($(P_SHAREDLIB),1)
+     EXTLIBS = -lstdc++.r4
+   else
+     ifeq ($(OSTYPE),Darwin)
+-      LDSOOPTS = -dynamiclib
++      LDSOOPTS = -dynamiclib -Wl,-install_name,@rpath/$(LIB_SONAME)
+     else
+       LDSOOPTS = -shared
+     endif

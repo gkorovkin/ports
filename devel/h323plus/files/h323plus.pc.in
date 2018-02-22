@@ -1,0 +1,14 @@
+prefix=@prefix@
+exec_prefix=${prefix}
+libdir=@LIBDIR@
+includedir=@includedir@
+
+Name: h323plus
+Description: h323plus library
+Version: @MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@
+Requires:
+Requires.private: sdl >= 1.2, libssl, ptlib >= 2.12.1, expat
+Conflicts:
+Libs: -L${libdir} -lh323
+Libs.private: -lpthread -lrt -ldl -lm
+Cflags: -I${includedir}

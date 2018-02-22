@@ -1,23 +1,101 @@
-Author: Jose Carlos Garcia Sogo <jsogo@debian.org>
-Description: This patch removes the "samples/simple" subdir from the Makefile.in.
-Index: h323plus/Makefile.in
-===================================================================
---- h323plus.orig/Makefile.in
-+++ h323plus/Makefile.in
-@@ -54,7 +54,7 @@ include $(OPENH323DIR)/openh323u.mak
- # export NOAUDIOCODECS=true
- # export NOVIDEO=true
+diff --git a/Makefile.in b/Makefile.in
+index 3780c0d..abfa671 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -82,6 +82,24 @@ ifndef PREFIX
+ PREFIX=/usr/local
+ endif
  
--SUBDIRS := samples/simple
-+SUBDIRS :=
++# and adjust shared lib names
++# and adjust shared lib names
++ifeq (,$(findstring $(OSTYPE),Darwin cygwin mingw))
++  ifeq ($(BUILD_TYPE),.)
++	LIBNAME_PAT	= $(OH323_FILE).$(MAJOR_VERSION).$(MINOR_VERSION).$(BUILD_NUMBER)
++  else
++	LIBNAME_PAT	= $(OH323_FILE).$(MAJOR_VERSION).$(MINOR_VERSION)-$(BUILD_TYPE)$(BUILD_NUMBER)
++  endif
++else
++  ifeq ($(BUILD_TYPE),.)
++	LIBNAME_PAT	= $(subst .$(LIB_SUFFIX),.$(MAJOR_VERSION).$(MINOR_VERSION).$(BUILD_NUMBER).$(LIB_SUFFIX),$(OH323_FILE))
++  else
++	LIBNAME_PAT	= $(subst .$(LIB_SUFFIX),.$(MAJOR_VERSION).$(MINOR_VERSION)-$(BUILD_TYPE)$(BUILD_NUMBER).$(LIB_SUFFIX),$(OH323_FILE))
++  endif
++endif
++
++LIB_SONAME		= $(LIBNAME_PAT)
++
+ update:
+ 	cvs update
+ 	$(MAKE) all
+@@ -93,41 +111,30 @@ $(subst tagbuild,,$(STANDARD_TARGETS)) ::
+ notrace::
+ 	$(MAKE) NOTRACE=1
  
- ifneq (,$(wildcard dump323))
- SUBDIRS += dump323
-@@ -99,6 +99,7 @@ docs:
- install:
+-docs: 
++docs:
+ 	doxygen h323plus_cfg.dxy
+ 
+ install: opt
+ 	echo "*** 'make install' is usually a bad idea, use 'make optnoshared' and point OPENH323DIR to your source dir ***"
  	mkdir -p $(DESTDIR)$(LIBDIR)
  	rm -f $(DESTDIR)$(LIBDIR)/libh323_*_r.so*
-+	$(INSTALL) -m 444 lib/libh323_s.a $(DESTDIR)$(LIBDIR)
- 	$(INSTALL) -m 444 lib/$(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@ $(DESTDIR)$(LIBDIR)
+-	$(INSTALL) -m 444 lib/$(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@ $(DESTDIR)$(LIBDIR)
+-	(cd $(DESTDIR)$(LIBDIR) ; \
+-		rm -f  $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@ ; \
+-		ln -sf $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@ $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@ \
+-	)
+-	(cd $(DESTDIR)$(LIBDIR) ; \
+-		rm -f  $(OH323_FILE).@MAJOR_VERSION@ ; \
+-		ln -sf $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@ $(OH323_FILE).@MAJOR_VERSION@ \
+-	)
++	$(INSTALL) -m 444 lib/$(LIB_SONAME) $(DESTDIR)$(LIBDIR)
++
  	(cd $(DESTDIR)$(LIBDIR) ; \
- 		rm -f  $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@ ; \
+ 		rm -f  $(OH323_FILE) ; \
+-		ln -sf $(OH323_FILE).@MAJOR_VERSION@.@MINOR_VERSION@.@BUILD_NUMBER@ $(OH323_FILE) \
+-	)
+-	(cd $(DESTDIR)$(LIBDIR); \
+-		rm -f  libopenh323.$(SHAREDLIBEXT) ; \
+-		ln -sf $(OH323_FILE) libopenh323.$(SHAREDLIBEXT) \
++		ln -sf $(LIB_SONAME) $(OH323_FILE) \
+ 	)
+ 	( for dir in $(DESTDIR)$(LIBDIR) \
+-		     $(DESTDIR)$(PREFIX)/include/openh323 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/codec \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h224 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h230 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h235 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h341 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h350 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h450 \
+-		     $(DESTDIR)$(PREFIX)/include/openh323/h460 \
+-		     $(DESTDIR)$(PREFIX)/share/openh323 ;\
++			 $(DESTDIR)$(PREFIX)/include/openh323 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/codec \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h224 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h230 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h235 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h341 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h350 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h450 \
++			 $(DESTDIR)$(PREFIX)/include/openh323/h460 \
++			 $(DESTDIR)$(PREFIX)/share/openh323 ;\
+ 		do mkdir -p $$dir ; chmod 755 $$dir ; \
+ 	done)
+ 	( for fn in include/*.h ; do \
+@@ -157,11 +164,11 @@ install: opt
+ 	( for fn in include/h460/*.h ; do \
+ 		$(INSTALL) -m 444 $$fn $(DESTDIR)$(PREFIX)/include/openh323/h460 ; \
+ 	done)
+-	$(INSTALL) -m 444 openh323u.mak $(DESTDIR)$(PREFIX)/share/openh323
++	$(INSTALL) -m 444 openh323u.mak $(DESTDIR)$(PREFIX)/share/openh323 ; \
++		$(INSTALL) -m 644 h323plus.pc $(DESTDIR)$(LIBDIR)/pkgconfig/
+ 
+ uninstall:
+ 	rm -rf $(DESTDIR)$(PREFIX)/include/openh323 \
+-	       $(PREFIX)/share/openh323
++		   $(PREFIX)/share/openh323
+ 	rm -f $(DESTDIR)$(LIBDIR)/$(OH323_FILE) \
+-	      $(DESTDIR)$(LIBDIR)/libopenh323.so
+-
++		  $(DESTDIR)$(LIBDIR)/libopenh323.so

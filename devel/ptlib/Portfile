@@ -13,12 +13,13 @@ description			ptlib
 long_description	PTLib 2.10.9 fork for GNU Gatekeeper and H323Plus
 
 patch.pre_args		-p1
-patchfiles			01_fix_sched_yield.patch 02_install_version.patch 03_fix_ssl.patch
+patchfiles			01_fix_sched_yield.patch 02_install_version.patch 03_fix_ssl.patch 04_add_install_name.patch
 
 fetch.type			git
 git.url				https://github.com/willamowius/ptlib
 git.branch			34c617943b707abe46c3c527323e2ac1159f8b35
 
+build.target		optshared debugshared
 
 post-destroot {
 	reinplace "s|include \$\(PTLIBDIR\)\/make|include \$\(PTLIBDIR\)\/share\/ptlib\/make|g" \
