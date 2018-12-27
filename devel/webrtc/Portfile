@@ -4,7 +4,7 @@
 PortSystem          1.0
 
 name                webrtc
-version             53
+version             59
 categories          devel
 platforms           darwin
 license             BSD
@@ -13,6 +13,12 @@ description         WebRTC library
 long_description    Google(c) library for implementing WebRTC features in C/C++ applications
 
 build.dir           ${worksrcpath}/webrtc-checkout
+
+fetch {
+set cmd "${portpath}/debian_tools.sh download"
+ui_debug "fetch cmd: ${cmd}"
+system ${cmd}
+}
 
 patchfiles          00_config.patch \
                     00_enable_call_api_lib.patch \
@@ -49,4 +55,3 @@ patchfiles          00_config.patch \
                     28_add_referencecountedfinal.patch \
                     29_inline_codec.patch \
                     30_gcc49_workarounds.patch
-

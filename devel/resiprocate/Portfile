@@ -20,3 +20,5 @@ git.branch			f519be9fe6fedac99b09e8e4be7a00172cc6cce7
 
 #building options
 use_autoreconf      yes
+
+configure.args      --with-c-ares

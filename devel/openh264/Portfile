@@ -4,7 +4,7 @@
 PortSystem          1.0
 
 name                openh264
-version             1.7.1
+version             1.8.0
 categories          devel
 platforms           darwin
 license             BSD
@@ -15,7 +15,7 @@ long_description    Open H264 Cisco SVC encoder/decoder
 #fetching fixed version
 fetch.type			git
 git.url				https://github.com/cisco/openh264.git
-git.branch			openh264v${version}
+git.branch			v${version}
 use_configure		no
 
 depends_lib         port:nasm
