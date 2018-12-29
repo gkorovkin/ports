@@ -15,7 +15,7 @@ long_description    Google(c) library for implementing WebRTC features in C/C++ 
 build.dir           ${worksrcpath}/webrtc-checkout
 
 fetch {
-set cmd "${portpath}/debian_tools.sh download"
+set cmd "${portpath}/fetch_sources.sh"
 ui_debug "fetch cmd: ${cmd}"
 system ${cmd}
 }
