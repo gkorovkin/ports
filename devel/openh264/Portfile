@@ -1,26 +1,18 @@
 # -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
 # $Id$
-
 PortSystem          1.0
+PortGroup           github 1.0
 
-name                openh264
-version             1.8.0
-categories          devel
-platforms           darwin
-license             BSD
-maintainers         gkorovin
-description         OpenH264
-long_description    Open H264 Cisco SVC encoder/decoder
+github.setup        cisco openh264 2.0.0 v
 
-#fetching fixed version
-fetch.type			git
-git.url				https://github.com/cisco/openh264.git
-git.branch			v${version}
+checksums           rmd160  0fc196989071caf50770b4cf608b6b265613b58b \
+                    sha256  f9f58adebe35beea2d6f5b96771036b3a9391958a3d5b0ef035f92a152b48d99 \
+                    size    60216503
+
 use_configure		no
-
 depends_lib         port:nasm
 
-# only one step
 pre-build {
+    # replace prefix
 	reinplace "s|/usr/local|${prefix}|g" ${worksrcpath}/Makefile
 }
