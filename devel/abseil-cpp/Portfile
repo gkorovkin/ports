@@ -1,0 +1,15 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+# $Id$
+PortSystem          1.0
+PortGroup           github 1.0
+PortGroup           cmake 1.1
+
+github.setup        abseil abseil-cpp 20190808
+
+checksums           rmd160  dfedbce98f5cc4697f391a2cdd70602e983f4bda \
+                    sha256  b97c2c8405d81edcc8a9a38286263c216dfbe2d9aee2b1d778d0a67a2016a540 \
+                    size    1481141
+
+cmake.out_of_source yes
+
+configure.args-append -DBUILD_TESTING=OFF
