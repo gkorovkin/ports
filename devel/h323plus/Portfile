@@ -32,16 +32,16 @@ depends_lib			port:ptlib
 #	 cd plugins && autoconf -f -I ${prefix}/aclocal
 #}
 
+post-fetch {
+    copy ${filespath}/h323plus.pc.in ${destroot.dir}/h323plus.pc.in
+}
+
 pre-configure {
 	reinplace "s|include \$\(PTLIBDIR\)\/make|include \$\(PTLIBDIR\)\/share\/ptlib\/make|g" \
 		${workpath}/${worksrcdir}/openh323u.mak.in \
 		${workpath}/${worksrcdir}/src/Makefile
 }
 
-#add pc file
-post-extract {
-	copy ${portpath}/${filesdir}/h323plus.pc.in ${workpath}/${worksrcdir}/
-}
 
 use_autoconf		yes
 autoconf.args		-I ${prefix}/share/aclocal
