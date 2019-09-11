@@ -1,0 +1,28 @@
+diff --git a/openh323u.mak.in b/openh323u.mak.in
+index e425fc0..70b83d1 100644
+--- a/openh323u.mak.in
++++ b/openh323u.mak.in
+@@ -65,7 +65,7 @@ H323_TLS	     = @H323_TLS@
+ ifndef HAS_PTLIB_LIB_MAK
+ 
+ ##### grab ptlib build settings
+-include $(PTLIBDIR)/make/ptbuildopts.mak
++include $(PTLIBDIR)/share/ptlib/make/ptbuildopts.mak
+ 
+ # compatibility with new ptlib - it's not has OPENSSL flag which cause undefined reference to `PPlugin_H235Authenticator_Std1_link()' in library
+ ifdef HAS_SASL2
+@@ -89,12 +89,12 @@ export PW_LIBDIR=@PT_LIBDIR@/lib_@target_os@_@target_cpu@
+ endif #HAS_PTLIB_LIB_MAK
+ 
+ ifdef LIBRARY_MAKEFILE
+-include $(PTLIBDIR)/make/unix.mak
++include $(PTLIBDIR)/share/ptlib/make/unix.mak
+ else
+ ifeq ($(NOTRACE), 1)
+ OBJDIR_SUFFIX := n
+ endif # NOTRACE
+-include $(PTLIBDIR)/make/ptlib.mak
++include $(PTLIBDIR)/share/ptlib/make/ptlib.mak
+ endif # LIBRARY_MAKEFILE
+ 
+ LIBDIRS += $(OPENH323DIR)

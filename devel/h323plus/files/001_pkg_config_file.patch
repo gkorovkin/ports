@@ -1,0 +1,12 @@
+diff --git a/configure.ac b/configure.ac
+index cf72965..c2fe2e9 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1001,6 +1001,7 @@ AC_PROG_INSTALL
+ AC_CONFIG_FILES(openh323u.mak)
+ AC_CONFIG_FILES(Makefile)
+ AC_CONFIG_FILES(h323plus_cfg.dxy)
++AC_CONFIG_FILES(h323plus.pc)
+ 
+ 
+ dnl ########################################################################
