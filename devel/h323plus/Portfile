@@ -3,54 +3,31 @@
 
 PortSystem			1.0
 
-name				h323plus
+name                h323plus
 distname			h323plus
-version				1.26.10
+version				1.27.1
 categories			devel
 platforms			darwin
 license				BSD
-maintainers			gkorovin
+
 description			H323Plus signalling stack development library
 long_description	H323 Plus library
 
 #fetch from cvs
 fetch.type			git
 git.url				https://github.com/willamowius/h323plus
-git.branch			64f090966acbd9c93b6a2cd78e5c49175e8e2920
+git.branch			558b2200a5ee26fa74ea2858f27623f88013292d
 
-
-#cvs.module			h323plus
 patch.pre_args		-p1
-patchfiles			01_configure.ac.patch 01_libname.patch 03_Makefile.in.patch
-	# \
-	#03_src_makefile.patch
-
+patchfiles          01_configure.ac.patch 01_libname.patch 03_Makefile.in.patch 02_open323u.mak.in.patch 03_src_makefile.patch
 depends_lib			port:ptlib
-
-#pre-configure {
-#	 autoconf -f -I ${prefix}/aclocal
-#	 cd plugins && autoconf -f -I ${prefix}/aclocal
-#}
 
 post-fetch {
     copy ${filespath}/h323plus.pc.in ${destroot.dir}/h323plus.pc.in
 }
 
-pre-configure {
-	reinplace "s|include \$\(PTLIBDIR\)\/make|include \$\(PTLIBDIR\)\/share\/ptlib\/make|g" \
-		${workpath}/${worksrcdir}/openh323u.mak.in \
-		${workpath}/${worksrcdir}/src/Makefile
-}
-
-
 use_autoconf		yes
 autoconf.args		-I ${prefix}/share/aclocal
 use_configure		yes
 build.target		optshared
-configure.args		--disable-plugins \
-					--disable-h46018 \
-					--disable-h46023 \
-					--disable-h460p \
-					--disable-gnugk \
-					--enable-h235 \
-					--enable-h235-256
+configure.args		--disable-plugins --disable-h46018 --disable-h46023 --disable-h460p --disable-gnugk --enable-h235 --enable-h235-256
