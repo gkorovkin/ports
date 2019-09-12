@@ -3,22 +3,23 @@
 # $Id$
 
 PortSystem			1.0
-name				resiprocate
-distname			resiprocate
-version				1.11.0~beta1
-categories			devel
-platforms			darwin
-license				VSL
-maintainers			gkorovin
-description			reSIP signalling stack development library
-long_description	reSIP library
+PortGroup           github 1.0
 
-# this is a really only to match debian build(1.11.0~beta1)
-fetch.type		    git
-git.url			    https://github.com/resiprocate/resiprocate
-git.branch			f519be9fe6fedac99b09e8e4be7a00172cc6cce7
+github.setup        resiprocate resiprocate 1.12.0_beta9 resiprocate-
 
-#building options
+checksums           rmd160  341369145041e6b3387414129f266bb506e2128b \
+                    sha256  544a3c0860414cbc72b491b08d96ca71376fbcc8668b6eebba75f70cfeb0fa31 \
+                    size    25806489
+
+depends_lib        port:asio
+
+# #building options
 use_autoreconf      yes
 
-configure.args      --with-c-ares
+
+configure.cxxflags	    -I${prefix}/include
+configure.ldflags       -L${prefix}/lib
+configure.args          --with-ssl --with-mysql --enable-ipv6 --with-popt --with-dtls --without-c-ares
+
+# build.args		    -C rutil
+# build.target-delete	    all
